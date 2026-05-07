@@ -608,11 +608,20 @@
     const banner=document.getElementById('importantBanner');
     const list=document.getElementById('importantBannerList');
     const today=todayStr();
-    const all=loadEvents().filter(ev=>ev.important&&ev.endDate>=today);
-    const inProgressEvs=all.filter(ev=>ev.startDate<=today).sort((a,b)=>a.endDate.localeCompare(b.endDate));
-    const upcomingEvs=all.filter(ev=>ev.startDate>today).sort((a,b)=>a.startDate.localeCompare(b.startDate));
-    if(!all.length){banner.classList.add('hidden');return;}
+    const all=loadEvents();
+
+    // 중요 일정 (오늘 이후 종료)
+    const importantAll=all.filter(ev=>ev.important&&ev.endDate>=today);
+    const inProgressEvs=importantAll.filter(ev=>ev.startDate<=today).sort((a,b)=>a.endDate.localeCompare(b.endDate));
+    const upcomingEvs=importantAll.filter(ev=>ev.startDate>today).sort((a,b)=>a.startDate.localeCompare(b.startDate));
+
+    // 오늘 진행 중인 일반 일정 (중요 표시 없는 것만)
+    const todayEvs=all.filter(ev=>!ev.important&&ev.startDate<=today&&ev.endDate>=today)
+      .sort((a,b)=>a.endDate.localeCompare(b.endDate));
+
+    if(!importantAll.length&&!todayEvs.length){banner.classList.add('hidden');return;}
     banner.classList.remove('hidden');list.innerHTML='';
+
     const makeItem=(ev,isIP)=>{
       const item=document.createElement('div');item.className='b-item'+(isIP?' in-progress':'');
       const badge=document.createElement('span');badge.className='b-user-badge';
@@ -634,6 +643,12 @@
       const t=document.createElement('div');t.className='b-section-title'+(inProgressEvs.length?' b-section-gap':'');
       t.textContent='📅 진행 예정 주요 일정';list.appendChild(t);
       upcomingEvs.forEach(ev=>list.appendChild(makeItem(ev,false)));
+    }
+    // 오늘 진행 중 일반 일정 (중요 일정 섹션 아래에 표시)
+    if(todayEvs.length){
+      const t=document.createElement('div');t.className='b-section-title'+(importantAll.length?' b-section-gap':'');
+      t.textContent='🗓️ 오늘 진행 일정';list.appendChild(t);
+      todayEvs.forEach(ev=>list.appendChild(makeItem(ev,true)));
     }
   }
 
