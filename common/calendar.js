@@ -448,10 +448,26 @@
       const shownThisSession=sessionStorage.getItem(sessionKey);
       localStorage.setItem(KEY_NOTIFY_ON,'0');
       updateAlarmBtn();
-      // 이번 세션에 아직 안 보여줬거나, 켜져있다가 꺼진 경우 → 모달 표시
+      // 이번 세션에 아직 안 보여줬거나, 켜져있다가 꺼진 경우 → 동의/거부 모달 표시
       if(wasEnabled||!shownThisSession){
         sessionStorage.setItem(sessionKey,'1');
-        await showNotifyPermModal(true);
+        const agreed=await showNotifyPermModal(false);
+        if(agreed){
+          // 동의 → 권한 재요청 시도
+          const newPerm=await Notification.requestPermission();
+          if(newPerm==='granted'){
+            localStorage.setItem(KEY_NOTIFY_ON,'1');
+            const seen=getSeenIds();
+            cache.events.forEach(ev=>seen.add(ev.id));
+            cache.notices.forEach(n=>seen.add(n.id));
+            saveSeenIds(seen);
+            await registerPushSubscription();
+          } else {
+            // 여전히 거부 → 브라우저 설정 안내
+            await showNotifyPermModal(true);
+          }
+          updateAlarmBtn();
+        }
       }
     }
   }
