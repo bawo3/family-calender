@@ -48,6 +48,16 @@ export default async function handler(req, res) {
       return send(res, 200, { ok: true });
     }
 
+    if (req.method === 'DELETE') {
+      const { name } = req.query;
+      if (!name) return send(res, 400, { error: 'name required' });
+      const users = await getJson(prefix, 'users', {});
+      if (!users[name]) return send(res, 404, { error: 'user not found' });
+      delete users[name];
+      await setJson(prefix, 'users', users);
+      return send(res, 200, { ok: true });
+    }
+
     return send(res, 405, { error: 'method not allowed' });
   } catch (e) {
     console.error('users handler error:', e);

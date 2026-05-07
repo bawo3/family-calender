@@ -272,6 +272,33 @@
   }
   .emoji-input:focus { border-color: #5588ff; }
 
+  /* ===== 사용자 관리 모달 ===== */
+  .user-list { margin-top: 4px; max-height: 320px; overflow-y: auto; }
+  .user-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 4px; border-bottom: 1px solid #1e2a4a;
+  }
+  .user-row:last-child { border-bottom: none; }
+  .user-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+  .user-name { flex: 1; font-size: 14px; color: #eee; }
+  .user-del-btn {
+    background: rgba(255,80,80,0.15); border: 1px solid rgba(255,80,80,0.35);
+    color: #ff8888; border-radius: 6px; padding: 3px 10px;
+    font-size: 12px; cursor: pointer; transition: background 0.15s;
+  }
+  .user-del-btn:hover { background: rgba(255,80,80,0.35); }
+  .user-empty { color: #666; font-size: 13px; text-align: center; padding: 20px 0; }
+  /* 사용자 관리 버튼 */
+  .cal-card .manage-btn {
+    position: absolute; top: 10px; left: 10px;
+    background: rgba(85,136,255,0.15); border: 1px solid rgba(85,136,255,0.35);
+    color: #88aaff; border-radius: 50%; width: 26px; height: 26px;
+    font-size: 13px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.2s;
+  }
+  .cal-card .manage-btn:hover { background: rgba(85,136,255,0.35); }
+
   /* ===== 반응형 ===== */
   @media (max-width: 480px) {
     body { padding: 16px; }
@@ -305,6 +332,17 @@
     </div>
   </div>
   <div class="cal-grid" id="calGrid"></div>
+</div>
+
+<!-- ===== 모달: 사용자 관리 ===== -->
+<div class="modal-overlay hidden" id="userModal">
+  <div class="modal">
+    <h2 id="userModalTitle">👥 사용자 관리</h2>
+    <div class="user-list" id="userList"></div>
+    <div class="modal-footer">
+      <button class="btn-cancel" id="userModalClose">닫기</button>
+    </div>
+  </div>
 </div>
 
 <!-- ===== 모달: 캘린더 추가 ===== -->
@@ -345,6 +383,16 @@
 </div>
 
 <script>
+  // ===== API 베이스 =====
+  const API = '/api';
+
+  // ===== 캘린더별 prefix 반환 =====
+  function calPrefix(cal) {
+    if (cal.id === 'builtin_family') return 'family';
+    if (cal.id === 'builtin_hyeju') return 'hyeju';
+    return 'cal_' + cal.id; // 동적 캘린더
+  }
+
   // ===== localStorage 키 =====
   const KEY_ADMIN_PW  = 'admin_password';    // 관리자 패스워드
   const KEY_CALENDARS = 'admin_calendars';   // 캘린더 목록
@@ -430,6 +478,17 @@
       const card = document.createElement('div');
       card.className = 'cal-card' + (cal.builtin ? ' builtin' : '');
       card.style.borderTopColor = cal.color;
+
+      // 사용자 관리 버튼 (좌측 상단)
+      const manageBtn = document.createElement('button');
+      manageBtn.className = 'manage-btn';
+      manageBtn.title = '사용자 관리';
+      manageBtn.textContent = '👥';
+      manageBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        openUserModal(cal);
+      });
+      card.appendChild(manageBtn);
 
       // 삭제 버튼 (내장 캘린더 제외)
       if (!cal.builtin) {
@@ -575,6 +634,77 @@
 
   document.getElementById('changePwModal').addEventListener('click', e => {
     if (e.target === document.getElementById('changePwModal')) document.getElementById('changePwModal').classList.add('hidden');
+  });
+
+  // ===== 사용자 관리 모달 =====
+  let currentUserModalCal = null;
+
+  async function openUserModal(cal) {
+    currentUserModalCal = cal;
+    document.getElementById('userModalTitle').textContent = `👥 ${cal.name} 사용자 관리`;
+    document.getElementById('userList').innerHTML = '<div class="user-empty">불러오는 중...</div>';
+    document.getElementById('userModal').classList.remove('hidden');
+    await renderUserList(cal);
+  }
+
+  async function renderUserList(cal) {
+    const prefix = calPrefix(cal);
+    const listEl = document.getElementById('userList');
+    try {
+      const res = await fetch(`${API}/users?prefix=${encodeURIComponent(prefix)}`);
+      const users = await res.json();
+      const names = Object.keys(users);
+      if (!names.length) {
+        listEl.innerHTML = '<div class="user-empty">등록된 사용자가 없습니다.</div>';
+        return;
+      }
+      listEl.innerHTML = '';
+      names.forEach(name => {
+        const u = users[name];
+        const row = document.createElement('div');
+        row.className = 'user-row';
+        const dot = document.createElement('div');
+        dot.className = 'user-dot';
+        dot.style.background = u.color || '#95a5a6';
+        const nameEl = document.createElement('span');
+        nameEl.className = 'user-name';
+        nameEl.textContent = name;
+        const delBtn = document.createElement('button');
+        delBtn.className = 'user-del-btn';
+        delBtn.textContent = '삭제';
+        delBtn.addEventListener('click', () => deleteUser(cal, name, row));
+        row.appendChild(dot);
+        row.appendChild(nameEl);
+        row.appendChild(delBtn);
+        listEl.appendChild(row);
+      });
+    } catch (e) {
+      listEl.innerHTML = '<div class="user-empty">불러오기 실패: ' + e.message + '</div>';
+    }
+  }
+
+  async function deleteUser(cal, name, rowEl) {
+    if (!confirm(`"${name}" 사용자를 삭제하시겠습니까?\n이 사용자의 일정 데이터는 유지됩니다.`)) return;
+    const prefix = calPrefix(cal);
+    try {
+      const res = await fetch(`${API}/users?prefix=${encodeURIComponent(prefix)}&name=${encodeURIComponent(name)}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) throw new Error((await res.json()).error || '삭제 실패');
+      rowEl.remove();
+      if (!document.getElementById('userList').querySelector('.user-row')) {
+        document.getElementById('userList').innerHTML = '<div class="user-empty">등록된 사용자가 없습니다.</div>';
+      }
+    } catch (e) {
+      alert('삭제 실패: ' + e.message);
+    }
+  }
+
+  document.getElementById('userModalClose').addEventListener('click', () => {
+    document.getElementById('userModal').classList.add('hidden');
+  });
+  document.getElementById('userModal').addEventListener('click', e => {
+    if (e.target === document.getElementById('userModal')) document.getElementById('userModal').classList.add('hidden');
   });
 
   // ===== 초기화 =====
