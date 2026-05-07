@@ -129,6 +129,26 @@
   </div>
 </div>
 
+<div class="modal-overlay hidden" id="iosInstallModal">
+  <div class="modal-box" style="max-width:380px;">
+    <h2>📱 iPhone 알림 받기</h2>
+    <p style="font-size:14px;color:var(--text-base);line-height:1.6;margin-bottom:12px;">iOS Safari는 일반 탭에서 알림을 지원하지 않아요.
+<strong>홈 화면에 추가</strong>하면 알림을 받을 수 있습니다.</p>
+    <div style="background:var(--item-bg);border-radius:8px;padding:12px 16px;margin-bottom:14px;font-size:13px;line-height:1.9;">
+      <ol style="margin:0;padding-left:20px;">
+        <li>Safari 하단의 <strong>공유 버튼</strong> ( <span style="display:inline-block;border:1px solid var(--border);border-radius:4px;padding:0 5px;">⬆️</span> ) 탭</li>
+        <li>목록에서 <strong>"홈 화면에 추가"</strong> 선택</li>
+        <li>홈 화면에 생긴 아이콘으로 다시 들어오기</li>
+        <li>알림 허용 후 사용</li>
+      </ol>
+      <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0 0;">※ iOS 16.4 이상 필요</p>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn primary" id="iosInstallCloseBtn">확인</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay hidden" id="notifyDeniedModal">
   <div class="modal-box" style="max-width:400px;">
     <h2>🔔 알림이 차단되어 있어요</h2>
@@ -526,6 +546,20 @@
     </ol>`;
   }
 
+  // iOS 감지 + PWA(홈화면 추가) 모드 감지
+  function isIOS(){ return /iPhone|iPad|iPod/i.test(navigator.userAgent); }
+  function isIOSStandalone(){
+    return isIOS() && (window.navigator.standalone===true || window.matchMedia('(display-mode: standalone)').matches);
+  }
+
+  // iOS 일반 Safari에서 알림 시도 시 PWA 설치 안내 모달
+  function showIOSInstallModal(){
+    const overlay=document.getElementById('iosInstallModal');
+    const closeBtn=document.getElementById('iosInstallCloseBtn');
+    overlay.classList.remove('hidden');
+    closeBtn.addEventListener('click',()=>overlay.classList.add('hidden'),{once:true});
+  }
+
   // 차단 안내 모달 — 사용자가 설정에서 권한 변경하면 자동 감지
   let deniedModalOpen=false;
   function showNotifyDeniedModal(){
@@ -575,6 +609,8 @@
 
   // 알림이 OFF 상태면 동의/거부 모달 표시 (세션당 1회)
   async function askNotifyIfOff(){
+    // iOS 일반 Safari는 자동 모달 띄우지 않음 (사용자가 알람버튼 직접 누를 때만 PWA 안내)
+    if(isIOS() && !isIOSStandalone()) return;
     if(!('Notification' in window)) return;
     if(isNotifyOn()) return; // 이미 ON이면 묻지 않음
     const sessionKey=`${PREFIX}_notifyAskShown`;
@@ -630,6 +666,11 @@
   }
 
   async function toggleNotify(){
+    // iOS Safari 일반 모드는 알림 미지원 → PWA 설치 안내
+    if(isIOS() && !isIOSStandalone()){
+      showIOSInstallModal();
+      return;
+    }
     if(!('Notification' in window)){ alert('이 브라우저는 알림을 지원하지 않습니다.'); return; }
     if(isNotifyOn()){
       // 끄기 — '0' 명시 저장 + 푸시 구독 해제
