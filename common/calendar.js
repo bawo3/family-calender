@@ -176,22 +176,22 @@
     cache.users = await fetchJSON(`${API}/users?prefix=${encodeURIComponent(PREFIX)}`);
   }
   async function refreshAllUsers(){
-    cache.allUsers = await fetchJSON(`${API}/users?prefix=${encodeURIComponent(PREFIX)}&all=1`);
+    // 이 캘린더 사용자만 표시 (다른 캘린더와 공유 안 함)
+    cache.allUsers = cache.users;
   }
   async function refreshNotices(){
     cache.notices = await fetchJSON(`${API}/notices?prefix=${encodeURIComponent(PREFIX)}`);
   }
   async function refreshAll(){
     if(localMode){
-      // 로컬 모드: localStorage에서 읽기
       cache.events  = lsGet(LS_EVENTS,  []);
       cache.users   = lsGet(LS_USERS,   {});
-      cache.allUsers = lsGet(LS_USERS,  {});
+      cache.allUsers = cache.users;
       cache.notices = lsGet(LS_NOTICES, []);
       return;
     }
-    // 병렬로 한 번에 가져와 초기 로딩 시간 단축
-    await Promise.all([refreshEvents(), refreshUsers(), refreshAllUsers(), refreshNotices()]);
+    await Promise.all([refreshEvents(), refreshUsers(), refreshNotices()]);
+    cache.allUsers = cache.users; // 같은 캘린더 사용자만 사용
   }
 
   // 캐시 읽기 (동기)

@@ -15,24 +15,14 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      // ?all=1: 전체 캘린더의 사용자 통합 조회
+      // ?all=1: 이전 호환용 — 현재 캘린더 사용자만 반환 (캘린더 간 사용자 공유 안 함)
       if (all === '1') {
-        const prefixes = await getAllPrefixes();
-        const merged = {};
-        // 현재 캘린더 우선 처리 (fromCurrent: true)
-        const currentUsers = await getJson(prefix, 'users', {});
-        Object.entries(currentUsers).forEach(([n, v]) => {
-          merged[n] = { ...v, fromCurrent: true };
+        const users = await getJson(prefix, 'users', {});
+        const result = {};
+        Object.entries(users).forEach(([n, v]) => {
+          result[n] = { ...v, fromCurrent: true };
         });
-        // 나머지 캘린더의 사용자도 합치되, 같은 이름이면 현재 캘린더 정보 유지
-        for (const p of prefixes) {
-          if (p === prefix) continue;
-          const us = await getJson(p, 'users', {});
-          Object.entries(us).forEach(([n, v]) => {
-            if (!merged[n]) merged[n] = { ...v, fromCurrent: false };
-          });
-        }
-        return send(res, 200, merged);
+        return send(res, 200, result);
       }
       // 현재 캘린더 사용자만
       const users = await getJson(prefix, 'users', {});
