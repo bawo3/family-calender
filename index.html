@@ -421,14 +421,33 @@
     localStorage.setItem(KEY_ADMIN_PW, pw);
   }
 
-  // ===== 캘린더 목록 로드/저장 =====
-  // 저장된 목록이 없으면 기본 2개로 초기화
-  function loadCalendars() {
-    const raw = localStorage.getItem(KEY_CALENDARS);
-    return raw ? JSON.parse(raw) : [...BUILTIN_CALENDARS];
+  // ===== 캘린더 목록 로드/저장 — KV(서버) 공유 =====
+  // 동적 캘린더는 /api/calendars 에 저장 → 모든 기기/사용자가 동일 목록 사용
+  // 빌트인 캘린더는 코드에 하드코딩되어 있으므로 항상 앞에 표시
+  async function loadCalendars() {
+    try {
+      const dynamic = await fetch('/api/calendars').then(r => r.ok ? r.json() : []);
+      const dynList = Array.isArray(dynamic) ? dynamic.map(c => ({...c, builtin: false})) : [];
+      const merged = [...BUILTIN_CALENDARS, ...dynList];
+      // 오프라인 폴백용으로 캐싱
+      localStorage.setItem(KEY_CALENDARS, JSON.stringify(merged));
+      return merged;
+    } catch(e) {
+      console.error('캘린더 목록 로드 실패 → localStorage 폴백:', e);
+      const raw = localStorage.getItem(KEY_CALENDARS);
+      return raw ? JSON.parse(raw) : [...BUILTIN_CALENDARS];
+    }
   }
-  function saveCalendars(list) {
-    localStorage.setItem(KEY_CALENDARS, JSON.stringify(list));
+  // 동적 캘린더만 서버에 저장 (빌트인 제외)
+  async function saveCalendars(fullList) {
+    localStorage.setItem(KEY_CALENDARS, JSON.stringify(fullList)); // 캐시
+    const dynamic = fullList.filter(c => !c.builtin)
+      .map(({id,name,emoji,color,file}) => ({id,name,emoji,color,file}));
+    await fetch('/api/calendars', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(dynamic)
+    });
   }
 
   // ===== 패스워드 화면 =====
@@ -469,8 +488,8 @@
     renderCalendars();
   }
 
-  function renderCalendars() {
-    const list = loadCalendars();
+  async function renderCalendars() {
+    const list = await loadCalendars();
     const grid = document.getElementById('calGrid');
     grid.innerHTML = '';
 
@@ -537,11 +556,11 @@
   }
 
   // ===== 캘린더 삭제 =====
-  function deleteCalendar(id) {
-    if (!confirm('이 캘린더를 목록에서 삭제하시겠습니까?\n(저장된 일정 데이터는 브라우저에 남아 있습니다)')) return;
-    const list = loadCalendars().filter(c => c.id !== id);
-    saveCalendars(list);
-    renderCalendars();
+  async function deleteCalendar(id) {
+    if (!confirm('이 캘린더를 목록에서 삭제하시겠습니까?\n(저장된 일정 데이터는 KV에 남아 있습니다)')) return;
+    const list = (await loadCalendars()).filter(c => c.id !== id);
+    await saveCalendars(list);
+    await renderCalendars();
   }
 
   // ===== 캘린더 추가 모달 =====
@@ -575,7 +594,7 @@
     document.getElementById('addModal').classList.add('hidden');
   });
 
-  document.getElementById('addModalConfirm').addEventListener('click', () => {
+  document.getElementById('addModalConfirm').addEventListener('click', async () => {
     const name  = document.getElementById('newCalName').value.trim();
     const emoji = document.getElementById('newCalEmoji').value.trim() || '📅';
     if (!name) { document.getElementById('newCalName').focus(); return; }
@@ -585,12 +604,19 @@
     // 새 캘린더는 calendar.html?id=XXX 로 열림
     const file = `calendar.html?id=${id}`;
 
-    const list = loadCalendars();
-    list.push({ id, name, emoji, color: pickedColor, file, builtin: false });
-    saveCalendars(list);
-
-    document.getElementById('addModal').classList.add('hidden');
-    renderCalendars();
+    const btn = document.getElementById('addModalConfirm');
+    btn.disabled = true; btn.textContent = '저장 중...';
+    try {
+      const list = await loadCalendars();
+      list.push({ id, name, emoji, color: pickedColor, file, builtin: false });
+      await saveCalendars(list);
+      document.getElementById('addModal').classList.add('hidden');
+      await renderCalendars();
+    } catch(e) {
+      alert('서버 저장 실패: ' + e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '추가';
+    }
   });
 
   // 모달 배경 클릭 시 닫기

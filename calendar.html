@@ -12,21 +12,38 @@
 </head>
 <body>
 <script>
-  // URL 파라미터(?id=...)로 캘린더 ID 결정 → admin_calendars 에서 정보 로드
+  // URL 파라미터(?id=...) → KV(/api/calendars)에서 메타 로드 → CAL_CONFIG 설정 → calendar.js 동적 로드
   const CAL_ID = new URLSearchParams(window.location.search).get('id') || 'default';
-  const adminRaw = localStorage.getItem('admin_calendars');
-  const cals = adminRaw ? JSON.parse(adminRaw) : [];
-  const info = cals.find(c => c.id === CAL_ID) || { name:'캘린더', emoji:'📅', color:'#5588ff' };
 
-  // 공통 로직에 전달할 설정
-  window.CAL_CONFIG = {
-    prefix: `cal_${CAL_ID}`,
-    title:  `${info.emoji} ${info.name}`,
-    accent: info.color
-  };
-  // 브라우저 탭 제목도 동적으로 변경
-  document.title = info.name;
+  (async function bootCalendar(){
+    let info = { name:'캘린더', emoji:'📅', color:'#5588ff' };
+    // 캐시(localStorage) 우선 적용 — 빠른 첫 페인트
+    try {
+      const cached = localStorage.getItem('admin_calendars');
+      if (cached) {
+        const found = JSON.parse(cached).find(c => c.id === CAL_ID);
+        if (found) info = found;
+      }
+    } catch(e){}
+    // KV에서 최신값 가져와서 갱신
+    try {
+      const dyn = await fetch('/api/calendars').then(r => r.ok ? r.json() : []);
+      const found = (Array.isArray(dyn) ? dyn : []).find(c => c.id === CAL_ID);
+      if (found) info = found;
+    } catch(e) { console.error('캘린더 메타 로드 실패, 캐시/기본값 사용:', e); }
+
+    window.CAL_CONFIG = {
+      prefix: `cal_${CAL_ID}`,
+      title:  `${info.emoji} ${info.name}`,
+      accent: info.color
+    };
+    document.title = info.name;
+
+    // 메타 로드 후 메인 스크립트 동적 주입
+    const s = document.createElement('script');
+    s.src = 'common/calendar.js';
+    document.body.appendChild(s);
+  })();
 </script>
-<script src="common/calendar.js"></script>
 </body>
 </html>
