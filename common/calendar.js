@@ -116,6 +116,19 @@
 </div>
 
 
+<div class="modal-overlay hidden" id="notifyPermModal">
+  <div class="modal-box" style="max-width:340px;">
+    <h2>🔔 알림 동의</h2>
+    <p style="font-size:14px;color:var(--text-base);line-height:1.7;margin-bottom:16px;white-space:pre-line;">새 일정·공지가 등록되면
+알림을 받을 수 있습니다.
+브라우저 알림을 허용하시겠습니까?</p>
+    <div class="modal-actions">
+      <button class="modal-btn cancel" id="notifyPermDenyBtn">거부</button>
+      <button class="modal-btn primary" id="notifyPermAllowBtn">동의</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay hidden" id="noticeModal">
   <div class="modal-box">
     <h2>📢 공지사항</h2>
@@ -393,12 +406,12 @@
     document.getElementById('userName').textContent=currentUser;
     document.getElementById('userDot').style.background=currentUserColor;
     updateSkinSwitchBtn();renderCalendar();renderEventList();
-    // 알림 권한 거부 체크 먼저 (공지보다 우선 — 모달 충돌 방지)
-    if(autoNotice) await syncNotifyPermission();
+    // 권한 상태 동기화 (외부 거부 시 KEY_NOTIFY_ON='0' 설정)
+    if(autoNotice) syncNotifyPermission();
+    // 알림 OFF 상태면 동의/거부 모달 (공지 유무와 무관, 세션당 1회)
+    if(autoNotice) await askNotifyIfOff();
     // 공지 있으면 자동 팝업 (첫 로딩 시만)
     if(autoNotice&&cache.notices.length>0) openNoticeModal();
-    // 최초 방문 시 알림 자동 활성화 시도 (KEY_NOTIFY_ON이 null인 경우만)
-    if(autoNotice) await autoEnableNotify();
     // 이미 ON인 경우 SW 재등록 (브라우저 재시작 후 SW가 사라질 수 있음)
     if(autoNotice && isNotifyOn()) registerPushSubscription();
     // 오늘 중요 일정 브라우저 알림
@@ -430,19 +443,45 @@
   }
 
   // 외부(시스템 설정/안드로이드 알림 트레이)에서 권한이 변경된 경우 상태 동기화
-  async function syncNotifyPermission(){
+  function syncNotifyPermission(){
     if(!('Notification' in window)) return;
-    if(Notification.permission==='denied'){
-      const wasEnabled=isNotifyOn(); // 켜져있다가 외부에서 거부된 경우
-      const sessionKey=`${PREFIX}_notifyDeniedShown`;
-      const shownThisSession=sessionStorage.getItem(sessionKey);
+    // 권한이 거부 상태면 알림 OFF로 강제 동기화
+    if(Notification.permission==='denied' && isNotifyOn()){
       localStorage.setItem(KEY_NOTIFY_ON,'0');
       updateAlarmBtn();
-      // 이번 세션에 아직 안 보여줬거나, 켜져있다가 꺼진 경우 → 알림 버튼과 동일하게 처리
-      if(wasEnabled||!shownThisSession){
-        sessionStorage.setItem(sessionKey,'1');
-        await toggleNotify();
-      }
+    }
+  }
+
+  // 알림 동의/거부 모달 (Promise<true=동의, false=거부>)
+  function showNotifyPermAskModal(){
+    return new Promise(resolve=>{
+      const overlay=document.getElementById('notifyPermModal');
+      const denyBtn=document.getElementById('notifyPermDenyBtn');
+      const allowBtn=document.getElementById('notifyPermAllowBtn');
+      overlay.classList.remove('hidden');
+      const cleanup=result=>{
+        overlay.classList.add('hidden');
+        resolve(result);
+      };
+      allowBtn.addEventListener('click',()=>cleanup(true),{once:true});
+      denyBtn.addEventListener('click',()=>cleanup(false),{once:true});
+    });
+  }
+
+  // 알림이 OFF 상태면 동의/거부 모달 표시 (세션당 1회)
+  async function askNotifyIfOff(){
+    if(!('Notification' in window)) return;
+    if(isNotifyOn()) return; // 이미 ON이면 묻지 않음
+    const sessionKey=`${PREFIX}_notifyAskShown`;
+    if(sessionStorage.getItem(sessionKey)) return; // 이번 세션에 이미 보여줌
+    sessionStorage.setItem(sessionKey,'1');
+    const agreed=await showNotifyPermAskModal();
+    if(agreed){
+      // 동의 → 알림 버튼 클릭과 동일한 동작
+      await toggleNotify();
+    } else {
+      localStorage.setItem(KEY_NOTIFY_ON,'0');
+      updateAlarmBtn();
     }
   }
 
@@ -514,26 +553,6 @@
     if(newPerm!=='granted'){
       localStorage.setItem(KEY_NOTIFY_ON,'0'); updateAlarmBtn(); return;
     }
-    localStorage.setItem(KEY_NOTIFY_ON,'1');
-    const seen=getSeenIds();
-    cache.events.forEach(ev=>seen.add(ev.id));
-    cache.notices.forEach(n=>seen.add(n.id));
-    saveSeenIds(seen);
-    await registerPushSubscription();
-    updateAlarmBtn();
-  }
-
-  // 최초 방문 시(KEY_NOTIFY_ON=null) 자동으로 알림 켜기 시도
-  async function autoEnableNotify(){
-    if(!('Notification' in window)) return;
-    if(localStorage.getItem(KEY_NOTIFY_ON)!==null) return; // 이미 설정됨(syncNotifyPermission이 denied 처리) → skip
-    const perm=Notification.permission;
-    if(perm==='denied') return; // syncNotifyPermission에서 이미 처리됨
-    if(perm==='default'){
-      const newPerm=await Notification.requestPermission();
-      if(newPerm!=='granted'){ localStorage.setItem(KEY_NOTIFY_ON,'0'); updateAlarmBtn(); return; }
-    }
-    // granted
     localStorage.setItem(KEY_NOTIFY_ON,'1');
     const seen=getSeenIds();
     cache.events.forEach(ev=>seen.add(ev.id));
