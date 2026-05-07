@@ -75,6 +75,7 @@
         <span class="u-name" id="userName"></span>
         <button class="u-btn" id="skinSwitchBtn"></button>
         <button class="u-btn" id="reloadBtn" title="새로고침">🔄</button>
+        <button class="u-btn" id="alarmBtn" title="중요일정 알림 설정">🔕</button>
         <button class="u-btn" id="noticeBtn">📢</button>
         <button class="u-btn logout-u-btn" id="logoutBtn">로그아웃</button>
       </div>
@@ -389,56 +390,83 @@
     // 공지 있으면 자동 팝업 (첫 로딩 시만)
     if(autoNotice&&cache.notices.length>0) openNoticeModal();
     // 오늘 중요 일정 브라우저 알림
-    if(autoNotice) requestAndNotify();
+    if(autoNotice) checkNewItemsAndNotify();
+    updateAlarmBtn();
   }
 
   // -----------------------------------------
-  // 브라우저 알림 (중요 일정)
+  // 브라우저 알림 — 캘린더별 ON/OFF
   // -----------------------------------------
-  async function requestAndNotify(){
-    if(!('Notification' in window)) return; // 미지원 브라우저
-    let perm=Notification.permission;
-    if(perm==='default'){
-      perm=await Notification.requestPermission();
+  const KEY_NOTIFY_ON   = `${PREFIX}_notify_on`;   // 알림 활성화 여부
+  const KEY_NOTIFY_SEEN = `${PREFIX}_notify_seen`;  // 이미 알림 보낸 ID 목록
+
+  function isNotifyOn(){ return localStorage.getItem(KEY_NOTIFY_ON)==='1'; }
+
+  function getSeenIds(){ return new Set(lsGet(KEY_NOTIFY_SEEN,[])); }
+  function saveSeenIds(set){
+    const arr=[...set];
+    lsSet(KEY_NOTIFY_SEEN, arr.slice(-500)); // 최대 500개 보관
+  }
+
+  function updateAlarmBtn(){
+    const btn=document.getElementById('alarmBtn');
+    if(!btn) return;
+    const on=isNotifyOn();
+    btn.textContent=on?'🔔':'🔕';
+    btn.title=on?'알림 ON — 클릭하여 끄기':'알림 OFF — 클릭하여 켜기';
+    btn.style.opacity=on?'1':'0.5';
+  }
+
+  async function toggleNotify(){
+    if(!('Notification' in window)){ alert('이 브라우저는 알림을 지원하지 않습니다.'); return; }
+    if(isNotifyOn()){
+      localStorage.removeItem(KEY_NOTIFY_ON);
+      updateAlarmBtn();
+      alert('🔕 이 캘린더 알림이 꺼졌습니다.');
+      return;
     }
-    if(perm!=='granted') return;
-    sendTodayNotifications();
+    // 켜기 — 권한 요청
+    let perm=Notification.permission;
+    if(perm==='default') perm=await Notification.requestPermission();
+    if(perm!=='granted'){
+      alert('브라우저에서 알림을 허용해주세요.\n주소창 왼쪽 🔒 아이콘 → 알림 → 허용');
+      return;
+    }
+    localStorage.setItem(KEY_NOTIFY_ON,'1');
+    // 현재 등록된 항목은 모두 seen으로 처리 (켜는 시점 이전 내역은 알림 안 보냄)
+    const seen=getSeenIds();
+    cache.events.forEach(ev=>seen.add(ev.id));
+    cache.notices.forEach(n=>seen.add(n.id));
+    saveSeenIds(seen);
+    updateAlarmBtn();
+    alert('🔔 이 캘린더 알림이 켜졌습니다!\n새 일정·공지가 등록되면 알림이 옵니다.');
   }
 
-  function sendTodayNotifications(){
-    const today=todayStr();
-    // 오늘 이미 알림 보낸 ID 목록 (하루 단위 중복 방지)
-    const lsKey=`${PREFIX}_notified_${today}`;
-    const sent=new Set(lsGet(lsKey,[]));
+  function checkNewItemsAndNotify(){
+    if(!isNotifyOn()) return;
+    if(!('Notification' in window)||Notification.permission!=='granted') return;
+    const seen=getSeenIds();
+    let changed=false;
 
-    const todayImportant=cache.events.filter(ev=>
-      ev.important && dateInRange(today,ev.startDate,ev.endDate)
-    );
-    if(!todayImportant.length) return;
-
-    let newSent=false;
-    todayImportant.forEach(ev=>{
-      if(sent.has(ev.id)) return; // 이미 알림 보냄
-      const isStart=ev.startDate===today;
-      const isEnd=ev.endDate===today;
+    // 새 일정 알림
+    cache.events.forEach(ev=>{
+      if(seen.has(ev.id)) return;
       const dateLabel=ev.startDate===ev.endDate
-        ? ev.startDate
-        : `${ev.startDate} ~ ${ev.endDate}`;
-      const statusLabel=isStart&&isEnd?'오늘 하루'
-        :isStart?'오늘 시작'
-        :isEnd?'오늘 마감'
-        :'진행 중';
+        ? ev.startDate : `${ev.startDate} ~ ${ev.endDate}`;
       const ts=formatTimeRange(ev.from,ev.to);
-      const body=`${ev.user} · ${dateLabel} [${statusLabel}]${ts?' · '+ts:''}`;
-      new Notification(`⭐ ${ev.text}`,{
-        body,
-        icon:'https://cdn.jsdelivr.net/npm/twemoji@14/assets/72x72/2b50.png',
-        tag:`${PREFIX}_${ev.id}`, // 같은 tag는 중복 표시 안 됨
-      });
-      sent.add(ev.id);
-      newSent=true;
+      const body=`${ev.user} · ${dateLabel}${ev.important?' ⭐중요':''}${ts?' · '+ts:''}`;
+      new Notification(`📅 ${ev.text}`,{body, tag:`${PREFIX}_ev_${ev.id}`});
+      seen.add(ev.id); changed=true;
     });
-    if(newSent) lsSet(lsKey,[...sent]);
+
+    // 새 공지 알림
+    cache.notices.forEach(n=>{
+      if(seen.has(n.id)) return;
+      new Notification(`📢 공지`,{body:`${n.user} · ${n.text}`, tag:`${PREFIX}_nt_${n.id}`});
+      seen.add(n.id); changed=true;
+    });
+
+    if(changed) saveSeenIds(seen);
   }
   function updateSkinSwitchBtn(){
     document.getElementById('skinSwitchBtn').textContent=currentUserSkin==='dark'?'☀️':'🌙';
@@ -775,7 +803,7 @@
     btn.disabled=true;btn.textContent='⏳';
     try{
       await refreshAll();
-      if(currentUser){renderCalendar();renderEventList();}
+      if(currentUser){renderCalendar();renderEventList();checkNewItemsAndNotify();}
       else{renderSavedUsers();}
     }catch(e){
       if(!localMode) alert('새로고침 실패: '+e.message);
@@ -818,6 +846,7 @@
   });
   document.getElementById('addBtn').addEventListener('click',addEvent);
   document.getElementById('reloadBtn').addEventListener('click',reloadData);
+  document.getElementById('alarmBtn').addEventListener('click',toggleNotify);
   document.getElementById('noticeBtn').addEventListener('click',openNoticeModal);
   document.getElementById('noticeCloseBtn').addEventListener('click',closeNoticeModal);
   document.getElementById('noticeAddBtn').addEventListener('click',addNotice);
@@ -838,7 +867,7 @@
     if(document.hidden)return;
     try{
       await refreshAll();
-      if(currentUser){renderCalendar();renderEventList();}
+      if(currentUser){renderCalendar();renderEventList();checkNewItemsAndNotify();}
       else{renderSavedUsers();}
     }catch(e){console.error('auto refresh failed',e);}
   });
