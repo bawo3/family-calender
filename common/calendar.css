@@ -74,7 +74,17 @@ body{font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;background:var
 .nav-btn{background:var(--accent);color:#fff;border:none;padding:7px 12px;border-radius:6px;cursor:pointer;font-size:14px;transition:background 0.15s;}
 .nav-btn:hover{background:var(--accent-dark);}
 .month-label{font-size:16px;font-weight:bold;flex:1;text-align:center;color:var(--text-primary);}
-@media(max-width:480px){body{padding:10px;}.container{padding:14px;}}
+@media(max-width:480px){
+  body{padding:10px;}
+  .container{padding:14px;}
+  /* 모바일 일정 입력 폼 — 시작/종료 옆 중요체크, 일정입력 옆 추가버튼 */
+  .event-form select.hour-select{min-width:54px;padding:6px 4px;font-size:12px;}
+  .event-form .time-label{font-size:11px;}
+  .event-form .important-check{font-size:12px;margin-left:auto;} /* 우측 끝으로 밀기 */
+  .event-form input[type="text"]{order:2;min-width:0;flex:1 1 0;}
+  .event-form button{order:3;flex:0 0 auto;padding:8px 14px;}
+  .event-form .edit-date-row{order:1;width:100%;}
+}
 
 /* 매우중요 배너 */
 .important-banner{background:linear-gradient(135deg,rgba(231,76,60,0.12),rgba(192,57,43,0.08));border:1px solid rgba(231,76,60,0.25);color:var(--text-primary);border-radius:8px;padding:10px 16px;margin-bottom:12px;}
