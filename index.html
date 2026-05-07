@@ -345,6 +345,17 @@
       <button class="btn-confirm" id="maxUsersSaveBtn" style="margin-left:auto;padding:6px 12px;font-size:13px;">저장</button>
     </div>
     <div class="user-list" id="userList"></div>
+    <button id="addUserToggleBtn" style="margin-top:10px;width:100%;padding:8px;background:transparent;border:1px dashed #5a6178;border-radius:6px;color:#9aa3b8;cursor:pointer;font-size:13px;">+ 사용자 추가</button>
+    <div id="addUserForm" class="hidden" style="margin-top:10px;padding:12px;background:#0e1730;border-radius:8px;display:flex;flex-direction:column;gap:8px;">
+      <input id="addUserName" placeholder="이름" maxlength="20" style="padding:8px;border:1px solid #2a3450;border-radius:6px;background:#1a2440;color:#eee;font-size:14px;">
+      <div style="font-size:12px;color:#9aa3b8;">색상</div>
+      <div id="addUserColorPicker" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+      <input id="addUserPhone" type="tel" inputmode="numeric" placeholder="휴대폰 번호 (선택)" style="padding:8px;border:1px solid #2a3450;border-radius:6px;background:#1a2440;color:#eee;font-size:14px;">
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="btn-cancel" id="addUserCancelBtn">취소</button>
+        <button class="btn-confirm" id="addUserConfirmBtn">추가</button>
+      </div>
+    </div>
     <div class="modal-footer">
       <button class="btn-cancel" id="userModalClose">닫기</button>
     </div>
@@ -752,6 +763,78 @@
     }
   }
 
+  // === 사용자 추가 폼 ===
+  let addUserPickedColor = THEME_COLORS[5];
+
+  function renderAddUserColors() {
+    const wrap = document.getElementById('addUserColorPicker');
+    wrap.innerHTML = '';
+    THEME_COLORS.forEach(c => {
+      const sw = document.createElement('div');
+      sw.style.cssText = `width:24px;height:24px;border-radius:50%;cursor:pointer;background:${c};border:2px solid ${c===addUserPickedColor?'#fff':'transparent'};box-shadow:0 0 0 1px #2a3450;`;
+      sw.addEventListener('click', () => { addUserPickedColor = c; renderAddUserColors(); });
+      wrap.appendChild(sw);
+    });
+  }
+
+  function resetAddUserForm() {
+    document.getElementById('addUserName').value = '';
+    document.getElementById('addUserPhone').value = '';
+    addUserPickedColor = THEME_COLORS[5];
+    renderAddUserColors();
+  }
+
+  document.getElementById('addUserToggleBtn').addEventListener('click', () => {
+    const form = document.getElementById('addUserForm');
+    const visible = !form.classList.contains('hidden');
+    if (visible) {
+      form.classList.add('hidden');
+    } else {
+      resetAddUserForm();
+      form.classList.remove('hidden');
+      document.getElementById('addUserName').focus();
+    }
+  });
+
+  document.getElementById('addUserCancelBtn').addEventListener('click', () => {
+    document.getElementById('addUserForm').classList.add('hidden');
+  });
+
+  document.getElementById('addUserConfirmBtn').addEventListener('click', async () => {
+    if (!currentUserModalCal) return;
+    const name = document.getElementById('addUserName').value.trim();
+    const phone = document.getElementById('addUserPhone').value.replace(/[^0-9]/g, '');
+    if (!name) { alert('이름을 입력하세요.'); return; }
+    const prefix = calPrefix(currentUserModalCal);
+    const btn = document.getElementById('addUserConfirmBtn');
+    btn.disabled = true; btn.textContent = '추가 중...';
+    try {
+      // 최대 인원 검사
+      const metaRes = await fetch(`${API}/cal-meta?prefix=${encodeURIComponent(prefix)}`);
+      const meta = metaRes.ok ? await metaRes.json() : {};
+      const usersRes = await fetch(`${API}/users?prefix=${encodeURIComponent(prefix)}`);
+      const users = usersRes.ok ? await usersRes.json() : {};
+      const max = Number(meta?.maxUsers || 0);
+      if (max > 0 && Object.keys(users).length >= max && !users[name]) {
+        throw new Error(`최대 인원(${max}명)에 도달했습니다.`);
+      }
+      // 사용자 등록
+      const body = { name, color: addUserPickedColor, skin: 'dark' };
+      if (phone) body.phone = phone;
+      const res = await fetch(`${API}/users?prefix=${encodeURIComponent(prefix)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) throw new Error((await res.json()).error || '추가 실패');
+      document.getElementById('addUserForm').classList.add('hidden');
+      await renderUserList(currentUserModalCal);
+    } catch (e) {
+      alert('추가 실패: ' + e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '추가';
+    }
+  });
+
   // 사용자 휴대폰 번호 저장
   async function savePhone(cal, name, phoneRaw, btn) {
     const prefix = calPrefix(cal);
@@ -814,9 +897,13 @@
 
   document.getElementById('userModalClose').addEventListener('click', () => {
     document.getElementById('userModal').classList.add('hidden');
+    document.getElementById('addUserForm').classList.add('hidden');
   });
   document.getElementById('userModal').addEventListener('click', e => {
-    if (e.target === document.getElementById('userModal')) document.getElementById('userModal').classList.add('hidden');
+    if (e.target === document.getElementById('userModal')) {
+      document.getElementById('userModal').classList.add('hidden');
+      document.getElementById('addUserForm').classList.add('hidden');
+    }
   });
 
   // ===== 초기화 =====
