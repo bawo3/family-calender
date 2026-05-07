@@ -1455,6 +1455,42 @@
     e.stopPropagation();
     currentDate.setMonth(currentDate.getMonth()+1);renderCalendar();
   });
+
+  // 캘린더 좌우 스와이프 — 다음달/저번달 이동
+  (function setupCalendarSwipe(){
+    const grid=document.getElementById('daysGrid');
+    if(!grid) return;
+    let sx=0, sy=0, st=0, tracking=false, swiped=false;
+    grid.addEventListener('touchstart',e=>{
+      if(editingEventId) return; // 수정 모드 비활성
+      if(e.touches.length!==1) return;
+      sx=e.touches[0].clientX; sy=e.touches[0].clientY;
+      st=Date.now(); tracking=true; swiped=false;
+    },{passive:true});
+    grid.addEventListener('touchend',e=>{
+      if(!tracking) return;
+      tracking=false;
+      if(e.changedTouches.length!==1) return;
+      const dx=e.changedTouches[0].clientX-sx;
+      const dy=e.changedTouches[0].clientY-sy;
+      const dt=Date.now()-st;
+      const MIN=60;            // 최소 이동 px
+      if(dt>700) return;       // 너무 느린 동작 무시
+      if(Math.abs(dx)<MIN) return;
+      if(Math.abs(dx)<Math.abs(dy)*1.2) return; // 수직이 더 크면 스크롤로 간주
+      // 스와이프 인식 — 후속 click 무시
+      swiped=true;
+      setTimeout(()=>{swiped=false;},400);
+      if(dx<0) currentDate.setMonth(currentDate.getMonth()+1); // 좌로 스와이프 → 다음달
+      else     currentDate.setMonth(currentDate.getMonth()-1); // 우로 스와이프 → 저번달
+      tapFirst=null;
+      renderCalendar();
+    },{passive:true});
+    // 스와이프 직후의 click 이벤트가 day cell 선택을 발생시키지 않도록 캡처 단계에서 차단
+    grid.addEventListener('click',e=>{
+      if(swiped){ e.stopPropagation(); e.stopImmediatePropagation(); e.preventDefault(); }
+    },true);
+  })();
   document.getElementById('todayBtn').addEventListener('click',(e)=>{
     e.stopPropagation();
     currentDate=new Date();renderCalendar();
