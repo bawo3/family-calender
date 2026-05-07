@@ -138,6 +138,8 @@
   </div>
 </div>
 
+<div id="noticeToast" class="notice-toast hidden">📢 새 공지가 있습니다</div>
+
 <div class="modal-overlay hidden" id="phoneAuthModal">
   <div class="modal-box" style="max-width:340px;">
     <h2>🔐 휴대폰 인증</h2>
@@ -707,8 +709,8 @@
     if(autoNotice) syncNotifyPermission();
     // 알림 OFF 상태면 동의/거부 모달 (공지 유무와 무관, 세션당 1회)
     if(autoNotice) await askNotifyIfOff();
-    // 공지 있으면 자동 팝업 (첫 로딩 시만)
-    if(autoNotice&&cache.notices.length>0) openNoticeModal();
+    // 공지 있으면 토스트로 5초간 은은하게 안내 (자동 모달 X)
+    if(autoNotice && cache.notices.length>0) showNoticeToast(cache.notices.length);
     // 이미 ON인 경우 SW 재등록 (브라우저 재시작 후 SW가 사라질 수 있음)
     if(autoNotice && isNotifyOn()) registerPushSubscription();
     // 오늘 중요 일정 브라우저 알림
@@ -1360,6 +1362,33 @@
   // 9) 공지사항 (async)
   // -----------------------------------------
   function openNoticeModal(){ renderNoticeList();document.getElementById('noticeModal').classList.remove('hidden'); }
+
+  // 공지 토스트 — 5초 동안 은은하게 페이드 인/아웃, 클릭하면 모달 열림
+  let noticeToastTimer=null;
+  function showNoticeToast(count){
+    const toast=document.getElementById('noticeToast');
+    if(!toast) return;
+    toast.textContent = `📢 등록된 공지 ${count}건이 있습니다 (탭하여 보기)`;
+    if(noticeToastTimer){ clearTimeout(noticeToastTimer); noticeToastTimer=null; }
+    toast.classList.remove('hidden');
+    // 강제 reflow → fade-in transition 적용
+    void toast.offsetWidth;
+    toast.classList.add('show');
+    // 한번만 클릭 시 즉시 모달 열기
+    const onTap=()=>{
+      toast.classList.remove('show');
+      setTimeout(()=>toast.classList.add('hidden'),400);
+      if(noticeToastTimer){ clearTimeout(noticeToastTimer); noticeToastTimer=null; }
+      openNoticeModal();
+    };
+    toast.addEventListener('click', onTap, {once:true});
+    // 5초 후 자동 페이드 아웃
+    noticeToastTimer=setTimeout(()=>{
+      toast.classList.remove('show');
+      setTimeout(()=>{ toast.classList.add('hidden'); toast.removeEventListener('click', onTap); }, 600);
+      noticeToastTimer=null;
+    }, 5000);
+  }
   function closeNoticeModal(){
     document.getElementById('noticeModal').classList.add('hidden');
     document.getElementById('noticeTextInput').value='';
