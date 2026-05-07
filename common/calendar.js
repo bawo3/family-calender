@@ -393,15 +393,15 @@
   // 7) 캘린더 화면 / 렌더링
   // -----------------------------------------
   async function showCalendar(autoNotice=false){
-    syncNotifyPermission(); // 시스템에서 권한 변경된 경우 먼저 반영
     applySkin(currentUserSkin);
     document.getElementById('loginBox').classList.add('hidden');
     document.getElementById('calendarBox').classList.remove('hidden');
     document.getElementById('userName').textContent=currentUser;
     document.getElementById('userDot').style.background=currentUserColor;
     updateSkinSwitchBtn();renderCalendar();renderEventList();
-    // 공지 있으면 자동 팝업 (첫 로딩 시만)
+    // 공지 있으면 자동 팝업 (첫 로딩 시만) — 공지 닫힐 때 알림 권한 체크로 이어짐
     if(autoNotice&&cache.notices.length>0) openNoticeModal();
+    else if(autoNotice) syncNotifyPermission(); // 공지 없으면 바로 권한 체크
     // 최초 방문 시 알림 자동 활성화 시도 (KEY_NOTIFY_ON이 null인 경우만)
     if(autoNotice) await autoEnableNotify();
     // 이미 ON인 경우 SW 재등록 (브라우저 재시작 후 SW가 사라질 수 있음)
@@ -906,6 +906,7 @@
   function closeNoticeModal(){
     document.getElementById('noticeModal').classList.add('hidden');
     document.getElementById('noticeTextInput').value='';
+    syncNotifyPermission(); // 공지 닫힌 후 알림 권한 거부 여부 체크
   }
   async function addNotice(){
     const text=document.getElementById('noticeTextInput').value.trim();if(!text)return;
