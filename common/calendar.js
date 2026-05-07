@@ -1550,7 +1550,7 @@
       setTimeout(()=>{swiped=false;},400);
       if(dx<0) currentDate.setMonth(currentDate.getMonth()+1); // 좌로 스와이프 → 다음달
       else     currentDate.setMonth(currentDate.getMonth()-1); // 우로 스와이프 → 저번달
-      tapFirst=null;
+      // 선택된 날짜/탭 상태는 그대로 유지 (prev/next 버튼과 동일 동작)
       renderCalendar();
     },{passive:true});
     // 스와이프 직후의 click 이벤트가 day cell 선택을 발생시키지 않도록 캡처 단계에서 차단
