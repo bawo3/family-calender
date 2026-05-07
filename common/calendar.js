@@ -437,11 +437,14 @@
   // 외부(시스템 설정/안드로이드 알림 트레이)에서 권한이 변경된 경우 상태 동기화
   function syncNotifyPermission(){
     if(!('Notification' in window)) return;
-    // 켜져있었는데 외부에서 거부된 경우 → 버튼 업데이트 후 안내 팝업
-    if(Notification.permission==='denied' && isNotifyOn()){
-      localStorage.setItem(KEY_NOTIFY_ON,'0');
-      updateAlarmBtn();
-      showNotifyPermModal(true); // 거부 안내 모달 표시
+    if(Notification.permission==='denied'){
+      const stored=localStorage.getItem(KEY_NOTIFY_ON);
+      // 명시적으로 끈 경우('0')가 아니면 → 거부 안내 모달 표시
+      if(stored!=='0'){
+        localStorage.setItem(KEY_NOTIFY_ON,'0'); // null 또는 '1' → '0' 으로 동기화
+        updateAlarmBtn();
+        showNotifyPermModal(true);
+      }
     }
   }
 
@@ -563,13 +566,9 @@
   // 최초 방문 시(KEY_NOTIFY_ON=null) 자동으로 알림 켜기 시도
   async function autoEnableNotify(){
     if(!('Notification' in window)) return;
-    if(localStorage.getItem(KEY_NOTIFY_ON)!==null) return; // 이미 설정됨 → skip
+    if(localStorage.getItem(KEY_NOTIFY_ON)!==null) return; // 이미 설정됨(syncNotifyPermission이 denied 처리) → skip
     const perm=Notification.permission;
-    if(perm==='denied'){
-      await showNotifyPermModal(true); // 차단 안내
-      localStorage.setItem(KEY_NOTIFY_ON,'0');
-      updateAlarmBtn(); return;
-    }
+    if(perm==='denied') return; // syncNotifyPermission에서 이미 처리됨
     if(perm==='default'){
       const agreed=await showNotifyPermModal(false);
       if(!agreed){ localStorage.setItem(KEY_NOTIFY_ON,'0'); updateAlarmBtn(); return; }
