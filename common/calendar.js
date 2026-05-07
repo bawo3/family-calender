@@ -44,26 +44,32 @@
 
 <div class="login-box hidden" id="loginBox">
   <h1 id="loginTitle">${TITLE}</h1>
-  <p>이름 입력 → 스킨 · 색상 선택 후 로그인하세요</p>
+  <p id="loginSubtitle">이름 입력 → 스킨 · 색상 선택 후 로그인하세요</p>
   <div class="quick-login" id="quickLoginSection">
     <h3>👤 사용자 선택 (탭하면 바로 로그인)</h3>
     <div class="quick-login-list" id="quickLoginList"></div>
   </div>
-  <label for="nameInput">이름</label>
-  <input type="text" id="nameInput" placeholder="이름을 입력하세요" maxlength="20">
-  <label>스킨 선택</label>
-  <div class="skin-toggle">
-    <div class="skin-btn active" id="skinLight">☀️ 라이트</div>
-    <div class="skin-btn" id="skinDark">🌙 다크</div>
+  <div id="capacityFullNote" class="hidden" style="background:rgba(231,76,60,0.1);border:1px solid rgba(231,76,60,0.3);border-radius:8px;padding:12px;margin:12px 0;color:#c0392b;font-size:13px;text-align:center;">
+    🔒 이 캘린더는 최대 인원에 도달했습니다.<br>
+    위에 표시된 등록된 사용자만 로그인할 수 있습니다.
   </div>
-  <label>색상 선택 (36가지)</label>
-  <div class="color-palette" id="colorPalette"></div>
-  <div class="selected-color-info">
-    <span>선택한 색상:</span>
-    <div class="selected-color-swatch" id="selectedSwatch" style="background:#bdc3c7"></div>
-    <span id="selectedColorText">선택되지 않음</span>
+  <div id="newUserForm">
+    <label for="nameInput">이름</label>
+    <input type="text" id="nameInput" placeholder="이름을 입력하세요" maxlength="20">
+    <label>스킨 선택</label>
+    <div class="skin-toggle">
+      <div class="skin-btn active" id="skinLight">☀️ 라이트</div>
+      <div class="skin-btn" id="skinDark">🌙 다크</div>
+    </div>
+    <label>색상 선택 (36가지)</label>
+    <div class="color-palette" id="colorPalette"></div>
+    <div class="selected-color-info">
+      <span>선택한 색상:</span>
+      <div class="selected-color-swatch" id="selectedSwatch" style="background:#bdc3c7"></div>
+      <span id="selectedColorText">선택되지 않음</span>
+    </div>
+    <button class="login-btn" id="loginBtn" disabled>로그인</button>
   </div>
-  <button class="login-btn" id="loginBtn" disabled>로그인</button>
 </div>
 
 <div class="container hidden" id="calendarBox">
@@ -454,9 +460,31 @@
     document.getElementById('loginBtn').disabled=!(document.getElementById('nameInput').value.trim()&&selectedColor);
   }
 
+  // 최대인원 도달 시: 사용자 칩만 노출, 신규 등록 폼 숨김
+  async function applyCapacityState(){
+    const form = document.getElementById('newUserForm');
+    const note = document.getElementById('capacityFullNote');
+    const subtitle = document.getElementById('loginSubtitle');
+    if(!form || !note) return;
+    let max = 0;
+    if(!localMode){
+      try {
+        const meta = await fetchJSON(`${API}/cal-meta?prefix=${encodeURIComponent(PREFIX)}`);
+        max = Number(meta?.maxUsers || 0);
+      } catch(e) { max = 0; }
+    }
+    const count = Object.keys(cache.users).length;
+    const full = max > 0 && count >= max;
+    form.classList.toggle('hidden', full);
+    note.classList.toggle('hidden', !full);
+    if(subtitle) subtitle.style.display = full ? 'none' : '';
+  }
+
   async function renderSavedUsers(){
     // 캘린더에 이력(일정)이 없는 사용자 자동 삭제
     await pruneInactiveUsers();
+    // 인원 제한 상태 반영 — 가득 차면 신규 등록 폼 숨김
+    await applyCapacityState();
     const users = loadAllUsers();
     const section=document.getElementById('quickLoginSection');
     const list=document.getElementById('quickLoginList');
