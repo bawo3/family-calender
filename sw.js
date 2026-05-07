@@ -6,7 +6,11 @@ self.addEventListener('push', event => {
     self.registration.showNotification(data.title ?? '📅 캘린더 알림', {
       body: data.body ?? '',
       tag: data.tag ?? 'cal-notification',
-      data: { url: data.url ?? self.location.origin }
+      data: { url: data.url ?? self.location.origin },
+      // 커스텀 액션 버튼 — 안드로이드 크롬에서 '수신거부' 옵션이 ⋮ 메뉴로 숨겨짐
+      actions: [
+        { action: 'open', title: '📅 열기' }
+      ]
     })
   );
 });
