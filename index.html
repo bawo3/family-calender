@@ -338,6 +338,12 @@
 <div class="modal-overlay hidden" id="userModal">
   <div class="modal">
     <h2 id="userModalTitle">👥 사용자 관리</h2>
+    <div class="max-users-section" style="background:#f4f6f8;border-radius:8px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span style="font-size:14px;font-weight:600;">최대 인원</span>
+      <input type="number" id="maxUsersInput" min="0" step="1" placeholder="0=무제한" style="width:90px;padding:6px 8px;border:1px solid #d0d4d9;border-radius:6px;font-size:14px;">
+      <span id="currentUserCount" style="font-size:12px;color:#7a8085;"></span>
+      <button class="btn-confirm" id="maxUsersSaveBtn" style="margin-left:auto;padding:6px 12px;font-size:13px;">저장</button>
+    </div>
     <div class="user-list" id="userList"></div>
     <div class="modal-footer">
       <button class="btn-cancel" id="userModalClose">닫기</button>
@@ -669,17 +675,33 @@
     currentUserModalCal = cal;
     document.getElementById('userModalTitle').textContent = `👥 ${cal.name} 사용자 관리`;
     document.getElementById('userList').innerHTML = '<div class="user-empty">불러오는 중...</div>';
+    document.getElementById('maxUsersInput').value = '';
+    document.getElementById('currentUserCount').textContent = '';
     document.getElementById('userModal').classList.remove('hidden');
-    await renderUserList(cal);
+    await Promise.all([renderUserList(cal), loadCalMeta(cal)]);
+  }
+
+  // 캘린더 메타(최대인원) 로드
+  async function loadCalMeta(cal) {
+    const prefix = calPrefix(cal);
+    try {
+      const res = await fetch(`${API}/cal-meta?prefix=${encodeURIComponent(prefix)}`);
+      const meta = await res.json();
+      document.getElementById('maxUsersInput').value = meta.maxUsers ?? 0;
+    } catch (e) {
+      document.getElementById('maxUsersInput').value = 0;
+    }
   }
 
   async function renderUserList(cal) {
     const prefix = calPrefix(cal);
     const listEl = document.getElementById('userList');
+    const countEl = document.getElementById('currentUserCount');
     try {
       const res = await fetch(`${API}/users?prefix=${encodeURIComponent(prefix)}`);
       const users = await res.json();
       const names = Object.keys(users);
+      countEl.textContent = `현재 ${names.length}명 등록됨`;
       if (!names.length) {
         listEl.innerHTML = '<div class="user-empty">등록된 사용자가 없습니다.</div>';
         return;
@@ -694,7 +716,7 @@
         dot.style.background = u.color || '#95a5a6';
         const nameEl = document.createElement('span');
         nameEl.className = 'user-name';
-        nameEl.textContent = name;
+        nameEl.textContent = name + (u.hasPhone ? ' 🔐' : '');
         const delBtn = document.createElement('button');
         delBtn.className = 'user-del-btn';
         delBtn.textContent = '삭제';
@@ -708,6 +730,29 @@
       listEl.innerHTML = '<div class="user-empty">불러오기 실패: ' + e.message + '</div>';
     }
   }
+
+  // 최대 인원 저장
+  document.getElementById('maxUsersSaveBtn').addEventListener('click', async () => {
+    if (!currentUserModalCal) return;
+    const prefix = calPrefix(currentUserModalCal);
+    const value = parseInt(document.getElementById('maxUsersInput').value, 10);
+    if (isNaN(value) || value < 0) { alert('0 이상의 정수를 입력하세요. (0 = 무제한)'); return; }
+    const btn = document.getElementById('maxUsersSaveBtn');
+    btn.disabled = true; btn.textContent = '저장 중...';
+    try {
+      const res = await fetch(`${API}/cal-meta?prefix=${encodeURIComponent(prefix)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ maxUsers: value })
+      });
+      if (!res.ok) throw new Error((await res.json()).error || '저장 실패');
+      btn.textContent = '✓ 저장됨';
+      setTimeout(() => { btn.textContent = '저장'; btn.disabled = false; }, 1200);
+    } catch (e) {
+      alert('저장 실패: ' + e.message);
+      btn.textContent = '저장'; btn.disabled = false;
+    }
+  });
 
   async function deleteUser(cal, name, rowEl) {
     if (!confirm(`"${name}" 사용자를 삭제하시겠습니까?\n이 사용자의 일정 데이터는 유지됩니다.`)) return;

@@ -592,12 +592,35 @@
     return !!result;
   }
 
+  // 새 사용자 등록 가능 여부 검사 — 캘린더 최대인원 초과 방지
+  async function checkUserCapacity(name){
+    if(localMode) return true;
+    if(cache.users[name]) return true; // 기존 사용자는 항상 통과
+    try {
+      const meta = await fetchJSON(`${API}/cal-meta?prefix=${encodeURIComponent(PREFIX)}`);
+      const max = Number(meta?.maxUsers || 0);
+      if (max <= 0) return true; // 0 = 무제한
+      const currentCount = Object.keys(cache.users).length;
+      if (currentCount >= max) {
+        alert(`이 캘린더는 최대 ${max}명까지 사용 가능합니다.\n현재 ${currentCount}명이 등록되어 더 이상 추가할 수 없습니다.\n관리자에게 문의해주세요.`);
+        return false;
+      }
+      return true;
+    } catch(e) {
+      console.error('최대인원 검사 실패, 진행 허용:', e);
+      return true;
+    }
+  }
+
   async function login(){
     const name=document.getElementById('nameInput').value.trim();
     if(!name||!selectedColor)return;
     const loginBtn=document.getElementById('loginBtn');
     loginBtn.disabled=true;
     try{
+      // 최대 인원 검증 (신규 사용자만 차단)
+      const capacityOk = await checkUserCapacity(name);
+      if(!capacityOk){ loginBtn.disabled=false; return; }
       // 휴대폰 인증 통과해야 진행
       const ok=await ensurePhoneAuth(name);
       if(!ok){ loginBtn.disabled=false; return; }
