@@ -1,12 +1,11 @@
 // 백그라운드 푸시 알림 처리 (페이지 닫혀있어도 동작)
 self.addEventListener('push', event => {
-  const data = event.data?.json() ?? {};
+  let data = {};
+  try { data = event.data?.json() ?? {}; } catch(e) { data = {}; }
   event.waitUntil(
     self.registration.showNotification(data.title ?? '📅 캘린더 알림', {
       body: data.body ?? '',
       tag: data.tag ?? 'cal-notification',
-      icon: '/icon-192.png',
-      requireInteraction: false,
       data: { url: data.url ?? self.location.origin }
     })
   );
