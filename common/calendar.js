@@ -688,13 +688,16 @@
       catch(e){ console.error('skin save failed', e); }
     }
   });
-  document.getElementById('prevBtn').addEventListener('click',()=>{
+  document.getElementById('prevBtn').addEventListener('click',(e)=>{
+    e.stopPropagation(); // 월 이동 시 tapFirst 초기화 방지
     currentDate.setMonth(currentDate.getMonth()-1);renderCalendar();
   });
-  document.getElementById('nextBtn').addEventListener('click',()=>{
+  document.getElementById('nextBtn').addEventListener('click',(e)=>{
+    e.stopPropagation();
     currentDate.setMonth(currentDate.getMonth()+1);renderCalendar();
   });
-  document.getElementById('todayBtn').addEventListener('click',()=>{
+  document.getElementById('todayBtn').addEventListener('click',(e)=>{
+    e.stopPropagation();
     currentDate=new Date();renderCalendar();
   });
   document.getElementById('addBtn').addEventListener('click',addEvent);
