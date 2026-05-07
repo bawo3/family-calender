@@ -1,29 +1,30 @@
 /* =========================================
-   캘린더 공통 로직
+   캘린더 공통 로직 (Vercel KV 백엔드 버전)
    - 3개 HTML(kim-family / jhkim-hyeju / calendar)이 공유
-   - 사용 방법: HTML에서 window.CAL_CONFIG 를 먼저 정의한 뒤 이 파일 로드
+   - 모든 데이터(일정·사용자·공지)는 /api/* 엔드포인트를 통해 KV DB에 저장
+   - 자동 로그인용 사용자 이름만 localStorage(`${prefix}_current_user`)에 저장
+     (이는 디바이스 단위 정보이므로 공유 불필요)
+
+   사용 방법: HTML에서 window.CAL_CONFIG 를 먼저 정의한 뒤 이 파일 로드
      {
-       prefix: 'family',           // localStorage 키 접두사 (필수)
-       title:  '👨‍👩‍👧‍👦 가족 캘린더', // 화면 상단 제목 (필수)
-       accent: '#3498db'           // 액센트 색상 (옵션, 미지정 시 CSS 기본값)
+       prefix: 'family',           // localStorage·DB 키 접두사 (필수, 영문/숫자/_)
+       title:  '👨‍👩‍👧‍👦 가족 캘린더', // 화면 제목 (필수)
+       accent: '#3498db'           // 액센트 색 (옵션)
      }
    ========================================= */
 (function(){
   'use strict';
 
   // -----------------------------------------
-  // 1) 설정 읽기
+  // 1) 설정
   // -----------------------------------------
-  const cfg = window.CAL_CONFIG || {};
-  const PREFIX = cfg.prefix || 'default';
-  const TITLE  = cfg.title  || '📅 캘린더';
-
-  const KEY_EVENTS  = `${PREFIX}_events`;
-  const KEY_USERS   = `${PREFIX}_users`;
+  const cfg     = window.CAL_CONFIG || {};
+  const PREFIX  = cfg.prefix || 'default';
+  const TITLE   = cfg.title  || '📅 캘린더';
+  const API     = '/api';
+  // 자동 로그인 정보(디바이스 한정)는 localStorage 에 보관
   const KEY_CURRENT = `${PREFIX}_current_user`;
-  const KEY_NOTICES = `${PREFIX}_notices`;
 
-  // 액센트 색상 적용 (옵션)
   if(cfg.accent){
     const darken = h=>{
       if(!h||!h.startsWith('#')||h.length<7)return h;
@@ -36,10 +37,12 @@
   }
 
   // -----------------------------------------
-  // 2) 기본 HTML 구조 주입
+  // 2) HTML 구조 + 로딩 오버레이 주입
   // -----------------------------------------
   const HTML_TEMPLATE = `
-<div class="login-box" id="loginBox">
+<div id="loadingOverlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.45);color:#fff;display:flex;align-items:center;justify-content:center;z-index:9999;font-size:16px;">⏳ 데이터 로딩 중...</div>
+
+<div class="login-box hidden" id="loginBox">
   <h1 id="loginTitle">${TITLE}</h1>
   <p>이름 입력 → 스킨 · 색상 선택 후 로그인하세요</p>
   <div class="quick-login" id="quickLoginSection">
@@ -71,6 +74,7 @@
         <div class="u-dot" id="userDot"></div>
         <span class="u-name" id="userName"></span>
         <button class="u-btn" id="skinSwitchBtn"></button>
+        <button class="u-btn" id="reloadBtn" title="새로고침">🔄</button>
         <button class="u-btn" id="noticeBtn">📢</button>
         <button class="u-btn logout-u-btn" id="logoutBtn">로그아웃</button>
       </div>
@@ -139,38 +143,80 @@
   let selectedStart=null, selectedEnd=null;
   let isDragging=false, dragStart=null, dragEnd=null;
 
-  // -----------------------------------------
-  // 4) 스토리지 헬퍼
-  // -----------------------------------------
-  function saveEvents(ev){ localStorage.setItem(KEY_EVENTS,JSON.stringify(ev)); }
-  function loadEvents(){
-    const raw=localStorage.getItem(KEY_EVENTS);if(!raw)return[];
-    const p=JSON.parse(raw);
-    // 구버전(객체) → 신버전(배열) 마이그레이션
-    if(!Array.isArray(p)){
-      const m=[];
-      Object.keys(p).forEach(d=>(p[d]||[]).forEach(ev=>m.push({id:makeId(),user:ev.user||'?',color:ev.color||'#95a5a6',text:ev.text||'',startDate:d,endDate:d,from:ev.from||'',to:ev.to||'',important:false})));
-      saveEvents(m);return m;
-    }
-    return p;
-  }
-  function loadUsers(){
-    const raw=localStorage.getItem(KEY_USERS);if(!raw)return{};
-    const p=JSON.parse(raw);const r={};
-    Object.keys(p).forEach(n=>{const v=p[n];r[n]=(typeof v==='string')?{color:v,skin:'light'}:v;});
-    return r;
-  }
-  function saveUsers(u){ localStorage.setItem(KEY_USERS,JSON.stringify(u)); }
-  function loadNotices(){ const r=localStorage.getItem(KEY_NOTICES);return r?JSON.parse(r):[]; }
-  function saveNotices(a){ localStorage.setItem(KEY_NOTICES,JSON.stringify(a)); }
+  // 메모리 캐시 — DB 호출 결과를 보관해서 렌더 함수는 동기적으로 동작
+  const cache = { events:[], users:{}, allUsers:{}, notices:[] };
 
   // -----------------------------------------
-  // 5) 포맷 / 유틸 헬퍼
+  // 4) API 헬퍼 + 캐시 동기화
+  // -----------------------------------------
+  async function fetchJSON(url, opts){
+    const r = await fetch(url, opts);
+    if(!r.ok){
+      let msg='';
+      try{ msg=(await r.json()).error||''; }catch(_){}
+      throw new Error(`API ${url}: ${r.status} ${msg}`);
+    }
+    return r.json();
+  }
+  async function refreshEvents(){
+    cache.events = await fetchJSON(`${API}/events?prefix=${encodeURIComponent(PREFIX)}`);
+  }
+  async function refreshUsers(){
+    cache.users = await fetchJSON(`${API}/users?prefix=${encodeURIComponent(PREFIX)}`);
+  }
+  async function refreshAllUsers(){
+    cache.allUsers = await fetchJSON(`${API}/users?prefix=${encodeURIComponent(PREFIX)}&all=1`);
+  }
+  async function refreshNotices(){
+    cache.notices = await fetchJSON(`${API}/notices?prefix=${encodeURIComponent(PREFIX)}`);
+  }
+  async function refreshAll(){
+    // 병렬로 한 번에 가져와 초기 로딩 시간 단축
+    await Promise.all([refreshEvents(), refreshUsers(), refreshAllUsers(), refreshNotices()]);
+  }
+
+  // 캐시 읽기 (동기)
+  function loadEvents(){ return cache.events; }
+  function loadUsers(){ return cache.users; }
+  function loadAllUsers(){ return cache.allUsers; }
+  function loadNotices(){ return cache.notices; }
+
+  // API 쓰기 (비동기) — 캐시도 즉시 갱신해서 UI 반응 빠르게
+  async function apiAddEvent(ev){
+    await fetchJSON(`${API}/events?prefix=${encodeURIComponent(PREFIX)}`,{
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(ev)
+    });
+    cache.events.push(ev);
+  }
+  async function apiDeleteEvent(id){
+    await fetchJSON(`${API}/events?prefix=${encodeURIComponent(PREFIX)}&id=${encodeURIComponent(id)}`,{method:'DELETE'});
+    cache.events = cache.events.filter(e=>e.id!==id);
+  }
+  async function apiUpsertUser(name,color,skin){
+    await fetchJSON(`${API}/users?prefix=${encodeURIComponent(PREFIX)}`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name,color,skin})
+    });
+    cache.users[name] = { color, skin };
+    cache.allUsers[name] = { color, skin, fromCurrent:true };
+  }
+  async function apiAddNotice(n){
+    await fetchJSON(`${API}/notices?prefix=${encodeURIComponent(PREFIX)}`,{
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(n)
+    });
+    cache.notices.unshift(n);
+  }
+  async function apiDeleteNotice(id){
+    await fetchJSON(`${API}/notices?prefix=${encodeURIComponent(PREFIX)}&id=${encodeURIComponent(id)}`,{method:'DELETE'});
+    cache.notices = cache.notices.filter(n=>n.id!==id);
+  }
+
+  // -----------------------------------------
+  // 5) 포맷 / 유틸
   // -----------------------------------------
   function makeId(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
   function formatDate(y,m,d){ return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
   function todayStr(){ const t=new Date();return formatDate(t.getFullYear(),t.getMonth(),t.getDate()); }
-  // 시간 표기: 신규 "H" 시 정수 / 구버전 "HH:MM" 호환 / 종료시간 뒤에 "까지"
   function formatTimeRange(f,t){
     const fmt=v=>{
       if(v===''||v==null)return'';
@@ -180,7 +226,6 @@
     };
     return(f&&t)?`${fmt(f)}~${fmt(t)}까지`:f?`${fmt(f)}~`:t?`~${fmt(t)}까지`:'';
   }
-  // 0~23시 옵션 채우기 — 시작은 "00시", 종료는 "00시까지" / 빈 옵션 없음 (기본 0시)
   function fillHourOptions(){
     const fromOpts=Array.from({length:24},(_,h)=>`<option value="${h}">${String(h).padStart(2,'0')}시</option>`).join('');
     const toOpts  =Array.from({length:24},(_,h)=>`<option value="${h}">${String(h).padStart(2,'0')}시까지</option>`).join('');
@@ -221,33 +266,10 @@
     document.getElementById('loginBtn').disabled=!(document.getElementById('nameInput').value.trim()&&selectedColor);
   }
 
-  // 모든 캘린더 사용자 통합 (현재 + 다른 *_users 키 모두 스캔)
-  function loadAllUsers(){
-    const parseRaw=raw=>{
-      if(!raw)return{};
-      try{
-        const p=JSON.parse(raw);const r={};
-        Object.keys(p).forEach(n=>{const v=p[n];r[n]=(typeof v==='string')?{color:v,skin:'light'}:v;});
-        return r;
-      }catch(e){return{};}
-    };
-    const merged={};
-    // 현재 캘린더 사용자
-    Object.entries(parseRaw(localStorage.getItem(KEY_USERS))).forEach(([n,v])=>{merged[n]={...v,fromCurrent:true};});
-    // 다른 캘린더의 *_users 키 모두 스캔 (admin_* 같은 시스템 키 제외)
-    for(let i=0;i<localStorage.length;i++){
-      const key=localStorage.key(i);
-      if(!key||key===KEY_USERS)continue;
-      if(!/_users$/.test(key))continue;
-      if(/^admin_/.test(key))continue;
-      Object.entries(parseRaw(localStorage.getItem(key))).forEach(([n,v])=>{
-        if(!merged[n])merged[n]={...v,fromCurrent:false};
-      });
-    }
-    return merged;
-  }
   function renderSavedUsers(){
-    const users=loadAllUsers(),section=document.getElementById('quickLoginSection'),list=document.getElementById('quickLoginList');
+    const users = loadAllUsers();
+    const section=document.getElementById('quickLoginSection');
+    const list=document.getElementById('quickLoginList');
     list.innerHTML='';const names=Object.keys(users);
     if(!names.length){section.style.display='none';return;}
     section.style.display='';
@@ -267,20 +289,25 @@
     });
   }
 
-  function login(){
+  async function login(){
     const name=document.getElementById('nameInput').value.trim();
     if(!name||!selectedColor)return;
-    const users=loadUsers();const prev=users[name]?.color;
-    users[name]={color:selectedColor,skin:selectedSkin};saveUsers(users);
-    // 색상 변경 시 기존 일정의 색도 함께 업데이트
-    if(prev&&prev!==selectedColor){
-      const ev=loadEvents();let ch=false;
-      ev.forEach(e=>{if(e.user===name){e.color=selectedColor;ch=true;}});
-      if(ch)saveEvents(ev);
+    document.getElementById('loginBtn').disabled=true;
+    try{
+      const prevColor = cache.users[name]?.color;
+      await apiUpsertUser(name, selectedColor, selectedSkin);
+      // 색상이 바뀐 경우 서버에서 일정 색까지 자동 동기화 → 클라이언트 캐시도 갱신
+      if(prevColor && prevColor!==selectedColor){
+        await refreshEvents();
+      }
+      localStorage.setItem(KEY_CURRENT,name);
+      currentUser=name;currentUserColor=selectedColor;currentUserSkin=selectedSkin;
+      showCalendar();
+    }catch(e){
+      alert('로그인 실패: 서버 연결을 확인하세요.');
+      console.error(e);
+      document.getElementById('loginBtn').disabled=false;
     }
-    localStorage.setItem(KEY_CURRENT,name);
-    currentUser=name;currentUserColor=selectedColor;currentUserSkin=selectedSkin;
-    showCalendar();
   }
   function logout(){
     localStorage.removeItem(KEY_CURRENT);
@@ -291,7 +318,6 @@
     document.getElementById('selectedSwatch').style.background='#bdc3c7';
     document.getElementById('selectedColorText').textContent='선택되지 않음';
     document.getElementById('loginBtn').disabled=true;
-    // 입력폼 초기화 (시간 select은 기본 0시로)
     const evIn=document.getElementById('eventInput');evIn.disabled=true;evIn.value='';
     ['eventFrom','eventTo'].forEach(id=>{const el=document.getElementById(id);el.disabled=true;el.value='0';});
     document.getElementById('importantCheck').checked=false;
@@ -318,7 +344,6 @@
     document.getElementById('skinSwitchBtn').textContent=currentUserSkin==='dark'?'☀️':'🌙';
   }
 
-  // 매우중요 배너
   function renderImportantBanner(){
     const banner=document.getElementById('importantBanner');
     const list=document.getElementById('importantBannerList');
@@ -377,7 +402,6 @@
       }
       const num=document.createElement('div');num.className='date-num';num.textContent=day;cell.appendChild(num);
 
-      // 중복 제거 후 이벤트 바 렌더링
       const dayEvs=events.filter(ev=>dateInRange(dateStr,ev.startDate,ev.endDate));
       const seen=new Set();
       const deduped=dayEvs.filter(ev=>{
@@ -387,9 +411,8 @@
       deduped.slice(0,2).forEach(ev=>{
         const isMulti=ev.startDate!==ev.endDate;
         let barClass;
-        if(!isMulti){
-          barClass='bar-single';
-        }else{
+        if(!isMulti){barClass='bar-single';}
+        else{
           const isFirst=dateStr===ev.startDate||wd===0;
           const isLast=dateStr===ev.endDate||wd===6;
           if(isFirst&&isLast)barClass='bar-span';
@@ -412,12 +435,10 @@
       }
       cell.addEventListener('click',()=>{
         if(!isDragging){
-          // 첫 탭: 당일 일정으로 즉시 활성화
           isDragging=true;dragStart=dateStr;dragEnd=dateStr;
           selectedStart=dateStr;selectedEnd=dateStr;
           activateInputs();updateSelectedLabel();renderCalendar();renderEventList();
         }else{
-          // 두번째 탭: 낮은 일자=시작, 높은 일자=종료 (기간 일정)
           isDragging=false;
           selectedStart=minDate(dragStart,dateStr);selectedEnd=maxDate(dragStart,dateStr);
           dragStart=dragEnd=null;activateInputs();updateSelectedLabel();renderCalendar();renderEventList();
@@ -449,7 +470,6 @@
     const list=document.getElementById('eventList');list.innerHTML='';
     if(!selectedStart)return;
     const events=loadEvents();
-    // 시작 시간(시 단위)으로 정렬 — 빈값/구버전 HH:MM 형식 모두 처리
     const hourOf=v=>{
       if(v===''||v==null)return 9999;
       const s=String(v);
@@ -491,55 +511,75 @@
   }
 
   // -----------------------------------------
-  // 8) 일정 추가/삭제
+  // 8) 일정 추가/삭제 (async)
   // -----------------------------------------
-  function addEvent(){
+  async function addEvent(){
     const input=document.getElementById('eventInput'),text=input.value.trim();
     if(!text||!selectedStart||!selectedEnd)return;
     const from=document.getElementById('eventFrom').value;
-    const to=document.getElementById('eventTo').value;
+    const to  =document.getElementById('eventTo').value;
     const important=document.getElementById('importantCheck').checked;
     if(selectedStart===selectedEnd&&from&&to&&parseInt(to,10)<parseInt(from,10)){
       alert('종료 시간이 시작 시간보다 빠를 수 없습니다.');return;
     }
-    const events=loadEvents();
-    events.push({id:makeId(),user:currentUser,color:currentUserColor,text,startDate:selectedStart,endDate:selectedEnd,from,to,important});
-    saveEvents(events);
-    input.value='';
-    document.getElementById('eventFrom').value='0';
-    document.getElementById('eventTo').value='0';
-    document.getElementById('importantCheck').checked=false;
-    // 추가 후 선택 상태 리셋: 다음 탭은 새로운 1차 탭으로 동작
-    isDragging=false;dragStart=null;dragEnd=null;
-    renderCalendar();renderEventList();
+    const newEv={id:makeId(),user:currentUser,color:currentUserColor,text,startDate:selectedStart,endDate:selectedEnd,from,to,important};
+    const addBtn=document.getElementById('addBtn');addBtn.disabled=true;
+    try{
+      await apiAddEvent(newEv);
+      input.value='';
+      document.getElementById('eventFrom').value='0';
+      document.getElementById('eventTo').value='0';
+      document.getElementById('importantCheck').checked=false;
+      isDragging=false;dragStart=null;dragEnd=null;
+      renderCalendar();renderEventList();
+    }catch(e){
+      alert('일정 추가 실패: '+e.message);console.error(e);
+    }finally{
+      addBtn.disabled=false;
+    }
   }
-  function deleteEvent(id){
-    const events=loadEvents(),target=events.find(ev=>ev.id===id);if(!target)return;
+  async function deleteEvent(id){
+    const target=cache.events.find(ev=>ev.id===id);if(!target)return;
     const who=target.user!==currentUser?`[${target.user}]님이 등록한 `:'';
     if(!confirm(`${who}"${target.text}" 일정을 삭제하시겠습니까?`))return;
-    saveEvents(events.filter(ev=>ev.id!==id));renderCalendar();renderEventList();
+    try{
+      await apiDeleteEvent(id);
+      renderCalendar();renderEventList();
+    }catch(e){
+      alert('삭제 실패: '+e.message);console.error(e);
+    }
   }
 
   // -----------------------------------------
-  // 9) 공지사항
+  // 9) 공지사항 (async)
   // -----------------------------------------
   function openNoticeModal(){ renderNoticeList();document.getElementById('noticeModal').classList.remove('hidden'); }
   function closeNoticeModal(){
     document.getElementById('noticeModal').classList.add('hidden');
     document.getElementById('noticeTextInput').value='';
   }
-  function addNotice(){
+  async function addNotice(){
     const text=document.getElementById('noticeTextInput').value.trim();if(!text)return;
     const now=new Date();const pad=n=>String(n).padStart(2,'0');
     const createdAt=`${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    const notices=loadNotices();
-    notices.unshift({id:makeId(),user:currentUser,color:currentUserColor,text,createdAt});
-    saveNotices(notices);
-    document.getElementById('noticeTextInput').value='';renderNoticeList();
+    const notice={id:makeId(),user:currentUser,color:currentUserColor,text,createdAt};
+    const btn=document.getElementById('noticeAddBtn');btn.disabled=true;
+    try{
+      await apiAddNotice(notice);
+      document.getElementById('noticeTextInput').value='';renderNoticeList();
+    }catch(e){
+      alert('공지 등록 실패: '+e.message);console.error(e);
+    }finally{
+      btn.disabled=false;
+    }
   }
-  function deleteNotice(id){
+  async function deleteNotice(id){
     if(!confirm('이 공지를 삭제하시겠습니까?'))return;
-    saveNotices(loadNotices().filter(n=>n.id!==id));renderNoticeList();
+    try{
+      await apiDeleteNotice(id);renderNoticeList();
+    }catch(e){
+      alert('공지 삭제 실패: '+e.message);console.error(e);
+    }
   }
   function renderNoticeList(){
     const listEl=document.getElementById('noticeList');listEl.innerHTML='';
@@ -564,7 +604,24 @@
   }
 
   // -----------------------------------------
-  // 10) 이벤트 바인딩
+  // 10) 새로고침 (다른 사용자가 추가한 데이터 가져오기)
+  // -----------------------------------------
+  async function reloadData(){
+    const btn=document.getElementById('reloadBtn');
+    btn.disabled=true;btn.textContent='⏳';
+    try{
+      await refreshAll();
+      if(currentUser){renderCalendar();renderEventList();}
+      else{renderSavedUsers();}
+    }catch(e){
+      alert('새로고침 실패: '+e.message);console.error(e);
+    }finally{
+      btn.disabled=false;btn.textContent='🔄';
+    }
+  }
+
+  // -----------------------------------------
+  // 11) 이벤트 바인딩
   // -----------------------------------------
   document.getElementById('skinLight').addEventListener('click',()=>setLoginSkin('light'));
   document.getElementById('skinDark').addEventListener('click',()=>setLoginSkin('dark'));
@@ -574,11 +631,13 @@
     if(e.key==='Enter'&&!document.getElementById('loginBtn').disabled)login();
   });
   document.getElementById('logoutBtn').addEventListener('click',logout);
-  document.getElementById('skinSwitchBtn').addEventListener('click',()=>{
+  document.getElementById('skinSwitchBtn').addEventListener('click',async()=>{
     currentUserSkin=currentUserSkin==='dark'?'light':'dark';
     applySkin(currentUserSkin);updateSkinSwitchBtn();
-    const u=loadUsers();
-    if(u[currentUser]){u[currentUser].skin=currentUserSkin;saveUsers(u);}
+    if(cache.users[currentUser]){
+      try{ await apiUpsertUser(currentUser, currentUserColor, currentUserSkin); }
+      catch(e){ console.error('skin save failed', e); }
+    }
   });
   document.getElementById('prevBtn').addEventListener('click',()=>{
     currentDate.setMonth(currentDate.getMonth()-1);renderCalendar();
@@ -590,6 +649,7 @@
     currentDate=new Date();renderCalendar();
   });
   document.getElementById('addBtn').addEventListener('click',addEvent);
+  document.getElementById('reloadBtn').addEventListener('click',reloadData);
   document.getElementById('noticeBtn').addEventListener('click',openNoticeModal);
   document.getElementById('noticeCloseBtn').addEventListener('click',closeNoticeModal);
   document.getElementById('noticeAddBtn').addEventListener('click',addNotice);
@@ -599,34 +659,53 @@
   ['eventInput','eventFrom','eventTo'].forEach(id=>{
     document.getElementById(id).addEventListener('keypress',e=>{if(e.key==='Enter')addEvent();});
   });
-
-  // 날짜 셀 외부를 클릭하면 진행중인 2탭 선택을 초기화
-  // (그 다음 셀 클릭은 다시 1차 탭 = 당일 일정으로 동작)
+  // 외부 클릭 시 진행중 2탭 선택 초기화
   document.addEventListener('click',e=>{
     if(!isDragging)return;
     if(e.target.closest('.day:not(.empty)'))return;
-    isDragging=false;dragStart=null;dragEnd=null;
-    renderCalendar();
+    isDragging=false;dragStart=null;dragEnd=null;renderCalendar();
+  });
+  // 다른 탭/창에서 돌아왔을 때 자동 새로고침 (다른 사용자 변경사항 반영)
+  document.addEventListener('visibilitychange',async()=>{
+    if(document.hidden)return;
+    try{
+      await refreshAll();
+      if(currentUser){renderCalendar();renderEventList();}
+      else{renderSavedUsers();}
+    }catch(e){console.error('auto refresh failed',e);}
   });
 
   // -----------------------------------------
-  // 11) 초기화
+  // 12) 초기화 (비동기 부트스트랩)
   // -----------------------------------------
   fillHourOptions();
-  // 시간 select 기본값 = 0시 (default 00시~00시까지)
   document.getElementById('eventFrom').value='0';
   document.getElementById('eventTo').value='0';
   renderColorPalette();
-  renderSavedUsers();
-  // 자동 로그인: 이전 로그인한 사용자 정보가 있으면 즉시 로그인 화면 통과
-  const savedName=localStorage.getItem(KEY_CURRENT);
-  if(savedName){
-    const u=loadUsers()[savedName];
-    if(u){
-      currentUser=savedName;
-      currentUserColor=u.color;currentUserSkin=u.skin||'light';
-      selectedColor=u.color;selectedSkin=u.skin||'light';
-      showCalendar();
+
+  (async function bootstrap(){
+    const overlay=document.getElementById('loadingOverlay');
+    try{
+      await refreshAll();
+    }catch(e){
+      console.error('초기 데이터 로드 실패:', e);
+      overlay.innerHTML='⚠️ 서버 연결 실패<br><span style="font-size:12px">API가 배포되지 않았거나 KV가 설정되지 않았을 수 있습니다.</span>';
+      overlay.style.flexDirection='column';
+      // 그래도 로그인 화면은 보여줌 (DB 비어있는 상태로 진행)
     }
-  }
+    overlay.classList.add('hidden');
+    document.getElementById('loginBox').classList.remove('hidden');
+    renderSavedUsers();
+    // 자동 로그인 (이 디바이스에 저장된 KEY_CURRENT 가 캐시에 있을 때)
+    const savedName=localStorage.getItem(KEY_CURRENT);
+    if(savedName){
+      const u=cache.users[savedName];
+      if(u){
+        currentUser=savedName;
+        currentUserColor=u.color;currentUserSkin=u.skin||'light';
+        selectedColor=u.color;selectedSkin=u.skin||'light';
+        showCalendar();
+      }
+    }
+  })();
 })();

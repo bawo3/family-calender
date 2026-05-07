@@ -8,39 +8,71 @@
 
 ```
 context/
+├── api/                    # ★ Vercel Serverless Functions (DB 백엔드)
+│   ├── _kv.js              # Vercel KV 헬퍼 (키 네이밍, JSON 안전 저장)
+│   ├── events.js           # GET/POST/PUT/DELETE 일정
+│   ├── users.js            # GET/POST 사용자 (전체 통합 ?all=1)
+│   └── notices.js          # GET/POST/DELETE 공지
 ├── common/                 # ★ 공통 자원 (CSS · JS)
 │   ├── calendar.css        # 3개 캘린더가 공유하는 모든 스타일
-│   └── calendar.js         # 3개 캘린더가 공유하는 모든 로직 (HTML 구조 포함)
+│   └── calendar.js         # 모든 JS 로직 + HTML 구조 (insertAdjacentHTML)
 ├── kim-family.html         # 가족 캘린더 (prefix: family)
 ├── jhkim-hyeju.html        # 재현혜주네 캘린더 (prefix: hyeju)
 ├── calendar.html           # 동적 캘린더 (prefix: cal_${id})
-├── index.html              # 관리자/홈 화면 (별도 — 공통 로직 미사용)
-└── calender.md             # 사용 설명 문서
+├── index.html              # 관리자/홈 (별도 — 공통 로직 미사용)
+├── package.json            # @vercel/kv 의존성
+├── DEPLOY.md               # Vercel 배포 가이드
+└── CLAUDE.md               # 이 파일
 ```
 
 ---
 
-## ⚖️ 공통화 정책 (반드시 준수)
+## 🗄️ 데이터 영속성 정책 (반드시 준수)
 
 ### 원칙
-**3개 캘린더(`kim-family.html`, `jhkim-hyeju.html`, `calendar.html`)에서 공통으로 쓰이는 모든 CSS와 JS는 `common/` 폴더에서만 관리한다.**
+**모든 공유 데이터(사용자·일정·공지)는 `/api/*` 엔드포인트를 통해 Vercel KV에 저장한다.**
+**브라우저 localStorage 는 디바이스 단위 정보(자동 로그인 이름) 외에는 사용하지 않는다.**
 
-### 공통 자원에 들어가야 하는 것
-- 모든 CSS (테마 색상은 CSS 변수로 노출)
-- 모든 자바스크립트 함수 (스토리지·렌더링·이벤트 처리·공지 등)
-- 로그인/캘린더/공지 모달의 HTML 구조 (`common/calendar.js`가 `document.body.insertAdjacentHTML('afterbegin', ...)`로 주입)
+### KV 키 네이밍 규약
+```
+cal:${prefix}:events    → JSON 배열 (일정)
+cal:${prefix}:users     → JSON 객체 {name: {color, skin}}
+cal:${prefix}:notices   → JSON 배열 (공지, 최신순)
+cal:_prefixes           → Set (등록된 모든 prefix — 전체 사용자 조회용)
+```
 
-### 각 HTML 파일에 들어가야 하는 것 (오직 이것만)
-- `<title>` 태그
-- `common/calendar.css` 링크
-- `window.CAL_CONFIG` 설정 객체
-- `common/calendar.js` 로드
-- (선택) `calendar.html`처럼 부트스트랩이 필요한 페이지의 동적 설정 로직
+### localStorage 허용 항목 (이것만)
+```
+${prefix}_current_user  → 자동 로그인용 사용자 이름 (디바이스마다 다를 수 있음)
+admin_calendars         → 동적 캘린더 메타데이터 (TODO: 추후 DB 이전)
+```
 
 ### 금지
-- 3개 HTML 중 어떤 파일에든 인라인 `<style>` 또는 비-부트스트랩 `<script>` 로직을 추가하지 말 것
-- 같은 코드를 2개 이상의 HTML에 중복 작성하지 말 것 (반드시 `common/`으로 옮긴다)
-- `common/calendar.js`에 특정 캘린더(prefix) 전용 분기를 하드코딩하지 말 것 — 필요하면 `CAL_CONFIG`에 새 옵션을 추가해서 처리
+- 새 데이터를 localStorage에 저장하는 신규 코드 작성 금지 — 무조건 API + KV
+- API 핸들러에서 prefix 검증 우회 금지 (`isValidPrefix` 사용 필수, 영문/숫자/_ 만)
+- 캐시(`cache.events` 등)에 직접 push 후 API 호출 누락 금지 — 항상 API 먼저 성공 후 캐시 갱신
+
+---
+
+## 🔌 API 설계 원칙
+
+- **prefix 격리**: 모든 엔드포인트는 `?prefix=` 쿼리로 캘린더 식별, 다른 prefix 데이터는 절대 노출 안 함
+- **에러 응답**: `{error: "메시지"}` JSON, 상태 코드는 400/405/500 명확히 구분
+- **CORS**: 현재 `*` 허용 (운영 시 origin 화이트리스트로 제한 권장)
+- **인증**: 현재 없음 (가족 단위 사용 가정). 공개 배포 시 토큰 인증 추가 필요
+
+---
+
+## ⚖️ 공통화 정책 (변경 없음)
+
+**3개 캘린더(`kim-family.html`, `jhkim-hyeju.html`, `calendar.html`)에서 공통으로 쓰이는 모든 CSS와 JS는 `common/` 폴더에서만 관리한다.**
+
+각 HTML 파일에 들어가야 하는 것 (오직 이것만)
+- `<title>` 태그
+- `common/calendar.css` 링크
+- `window.CAL_CONFIG` 설정 객체 (`prefix`, `title`, 선택적 `accent`)
+- `common/calendar.js` 로드
+- (선택) `calendar.html`처럼 부트스트랩이 필요한 페이지의 동적 설정 로직
 
 ---
 
@@ -48,35 +80,10 @@ context/
 
 | 키 | 타입 | 필수 | 설명 |
 |---|---|---|---|
-| `prefix` | string | ✅ | localStorage 키 접두사. `${prefix}_events`, `${prefix}_users`, `${prefix}_current_user`, `${prefix}_notices` 형태로 사용 |
-| `title` | string | ✅ | 로그인 화면 + 캘린더 헤더에 표시되는 제목 (이모지 포함 가능) |
-| `accent` | string(`#RRGGBB`) | ❌ | 라이트 테마 액센트 색상 (옵션). 미지정 시 CSS 기본값(`#3498db`) 사용. 다크용은 자동으로 78% 어둡게 계산됨 |
-| `accentDark` | string | ❌ | `accent`의 어두운 변형을 직접 지정하고 싶을 때 (옵션) |
-
-### 호출 예시
-```html
-<script>
-  window.CAL_CONFIG = {
-    prefix: 'family',
-    title:  '👨‍👩‍👧‍👦 가족 캘린더'
-  };
-</script>
-<script src="common/calendar.js"></script>
-```
-
----
-
-## 💾 localStorage 키 규약
-
-| 키 형식 | 내용 |
-|---|---|
-| `${prefix}_events` | 일정 배열 |
-| `${prefix}_users` | 사용자 정보 객체 (`{이름: {color, skin}}`) |
-| `${prefix}_current_user` | 마지막 로그인한 사용자 이름 (자동 로그인용) |
-| `${prefix}_notices` | 공지사항 배열 |
-| `admin_calendars` | (시스템) 동적 캘린더 목록 — `index.html`이 관리 |
-
-`loadAllUsers()`는 `localStorage`의 모든 `*_users` 키를 스캔해서 사용자 칩을 모읍니다. 새 캘린더가 추가돼도 코드 수정 없이 자동으로 인식됩니다 (`admin_*` 키는 제외).
+| `prefix` | string | ✅ | KV 키 + localStorage 자동로그인 키 접두사. 영문/숫자/_ 1~64자 |
+| `title` | string | ✅ | 화면 제목 (이모지 포함 가능) |
+| `accent` | string(`#RRGGBB`) | ❌ | 라이트 액센트 색. 다크용은 자동으로 78% 어둡게 계산됨 |
+| `accentDark` | string | ❌ | 다크용 액센트를 직접 지정 |
 
 ---
 
@@ -106,6 +113,19 @@ context/
 </body>
 </html>
 ```
+
+KV에 prefix가 처음 등록되는 시점은 첫 사용자 로그인할 때입니다 (`api/_kv.js`의 `setJson`이 자동으로 `cal:_prefixes` set에 추가).
+
+---
+
+## 🔄 비동기 데이터 흐름 (calendar.js)
+
+1. **부트스트랩**: `refreshAll()` 로 events/users/allUsers/notices 병렬 로드 → `cache` 채움
+2. **렌더 함수**: 모두 캐시(`loadEvents()` 등)를 동기적으로 읽어 그림
+3. **변경 작업**: API 먼저 호출 → 성공 시 캐시 갱신 → 다시 렌더
+4. **새로고침**:
+   - 헤더의 🔄 버튼 클릭
+   - 다른 탭에서 돌아왔을 때 (`visibilitychange`) 자동 호출
 
 ---
 
