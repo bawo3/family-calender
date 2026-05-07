@@ -118,6 +118,12 @@ body.dark .b-item.in-progress{background:rgba(46,204,113,0.15);}
 .day.range-edge{background:rgba(243,156,18,0.28);border-color:#e67e22;}
 .day .date-num{font-size:14px;font-weight:bold;margin-bottom:4px;color:var(--text-primary);}
 .day.sun .date-num{color:#e74c3c;} .day.sat .date-num{color:#3498db;}
+/* 법정공휴일 — 빨간 글씨 + 공휴일명 라벨 */
+.day.holiday .date-num{color:#e74c3c;}
+.day .holiday-name{font-size:9px;color:#e74c3c;line-height:1.15;margin:-2px 0 3px 0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+@media(max-width:480px){
+  .day .holiday-name{font-size:8px;}
+}
 
 /* 이벤트 바 (기간 일정) */
 .event-bar{color:#fff;font-size:11px;height:18px;line-height:18px;margin-top:2px;padding:0 5px;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
