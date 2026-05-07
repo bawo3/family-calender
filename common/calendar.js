@@ -318,8 +318,9 @@
   function formatDate(y,m,d){ return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
   function todayStr(){ const t=new Date();return formatDate(t.getFullYear(),t.getMonth(),t.getDate()); }
 
-  // 대한민국 법정공휴일 (2024-2027) — 음력 명절은 해마다 양력 변환 필요해서 하드코딩
-  const HOLIDAYS = {
+  // 대한민국 법정공휴일 — 1년에 1번 date.nager.at API에서 자동 갱신.
+  // API 실패 시 아래 하드코딩 폴백 사용. 음력 명절(설날·추석·부처님오신날)은 양력 환산값.
+  const HOLIDAYS_FALLBACK = {
     // 2024
     '2024-01-01':'신정','2024-02-09':'설날','2024-02-10':'설날','2024-02-11':'설날','2024-02-12':'대체공휴일',
     '2024-03-01':'삼일절','2024-04-10':'국회의원선거','2024-05-05':'어린이날','2024-05-06':'대체공휴일',
@@ -344,7 +345,42 @@
     '2027-09-15':'추석','2027-09-16':'추석','2027-10-03':'개천절','2027-10-04':'대체공휴일',
     '2027-10-09':'한글날','2027-10-11':'대체공휴일','2027-12-25':'성탄절'
   };
-  function getHoliday(dateStr){ return HOLIDAYS[dateStr] || null; }
+  // 실제 사용 데이터 (API 캐시 + 폴백 병합) — bootstrap에서 갱신 시도
+  let holidaysData = { ...HOLIDAYS_FALLBACK };
+  function getHoliday(dateStr){ return holidaysData[dateStr] || null; }
+
+  // 1년에 1번 공휴일 갱신 — date.nager.at 무료 API (CORS 허용, 키 불필요)
+  async function refreshHolidaysIfNeeded(){
+    const CACHE_KEY = 'kr_holidays_cache';
+    const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+    const cached = lsGet(CACHE_KEY, null);
+    const now = Date.now();
+    // 캐시가 1년 이내면 그대로 사용 (재요청 X)
+    if (cached?.fetchedAt && (now - cached.fetchedAt) < ONE_YEAR_MS && cached.data) {
+      holidaysData = { ...HOLIDAYS_FALLBACK, ...cached.data };
+      return false; // 갱신 안 함
+    }
+    // 1년 지났거나 캐시 없음 → API에서 가져오기 (작년 ~ 내후년 4개년)
+    const cy = new Date().getFullYear();
+    const years = [cy - 1, cy, cy + 1, cy + 2];
+    try {
+      const all = {};
+      for (const year of years) {
+        const res = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/KR`);
+        if (!res.ok) continue;
+        const list = await res.json();
+        list.forEach(h => { if (h.date && h.localName) all[h.date] = h.localName; });
+      }
+      if (Object.keys(all).length > 0) {
+        lsSet(CACHE_KEY, { fetchedAt: now, data: all });
+        holidaysData = { ...HOLIDAYS_FALLBACK, ...all };
+        return true; // 갱신됨
+      }
+    } catch(e) {
+      console.error('공휴일 API 가져오기 실패 → 하드코딩 폴백 사용:', e);
+    }
+    return false;
+  }
   function formatTimeRange(f,t){
     if(String(f)===String(t)) return ''; // 시작=종료 동일하면 시간 표시 안 함
     const fmt=v=>{
@@ -1230,6 +1266,11 @@
 
   (async function bootstrap(){
     const overlay=document.getElementById('loadingOverlay');
+    // 캐시된 공휴일 즉시 적용 (있으면) — 페이지 로딩 차단하지 않음
+    refreshHolidaysIfNeeded().then(updated=>{
+      // 1년 지나서 새로 받아왔으면 캘린더 다시 그리기
+      if(updated && currentUser){ renderCalendar(); }
+    });
     try{
       await refreshAll();
     }catch(e){
