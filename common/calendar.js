@@ -404,11 +404,12 @@
       const badge=document.createElement('span');badge.className='b-user-badge';
       badge.style.background=ev.color||'#95a5a6';badge.textContent=ev.user;
       const ts=formatTimeRange(ev.from,ev.to);
-      const text=document.createElement('span');
-      text.innerHTML=ev.text+(ts?` <span class="b-time">${ts}</span>`:'');
+      const text=document.createElement('span');text.textContent=ev.text;
       const range=document.createElement('span');range.className='b-range'+(isIP?' b-range-ip':'');
       range.textContent=ev.startDate===ev.endDate?ev.startDate:`${ev.startDate}~${ev.endDate}`;
-      item.appendChild(badge);item.appendChild(text);item.appendChild(range);return item;
+      item.appendChild(badge);item.appendChild(text);
+      if(ts){const tb=document.createElement('span');tb.className='b-time';tb.textContent=`⏰ ${ts}`;item.appendChild(tb);}
+      item.appendChild(range);return item;
     };
     if(inProgressEvs.length){
       const t=document.createElement('div');t.className='b-section-title';
