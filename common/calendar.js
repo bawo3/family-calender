@@ -105,6 +105,10 @@
       <select id="eventTo" class="hour-select" disabled></select>
       <input type="text" id="eventInput" placeholder="일정 내용을 입력하세요" disabled>
       <label class="important-check"><input type="checkbox" id="importantCheck" disabled> ⭐ 중요</label>
+      <div id="editDateRow" class="edit-date-row" style="display:none;">
+        <span class="time-label">시작일</span><input type="date" id="editStartDate">
+        <span class="time-label">종료일</span><input type="date" id="editEndDate">
+      </div>
       <button id="addBtn" disabled>추가</button>
     </div>
     <ul class="event-list" id="eventList"></ul>
@@ -125,14 +129,14 @@
 <div class="modal-overlay hidden" id="noticeModal">
   <div class="modal-box">
     <h2>📢 공지사항</h2>
+    <div class="notice-list-section">
+      <h3>등록된 공지</h3>
+      <div id="noticeList"></div>
+    </div>
     <textarea id="noticeTextInput" placeholder="공지 내용을 입력하세요..."></textarea>
     <div class="modal-actions">
       <button class="modal-btn cancel" id="noticeCloseBtn">닫기</button>
       <button class="modal-btn primary" id="noticeAddBtn">등록</button>
-    </div>
-    <div class="notice-list-section">
-      <h3>등록된 공지</h3>
-      <div id="noticeList"></div>
     </div>
   </div>
 </div>`;
@@ -720,6 +724,7 @@
       }
       cell.addEventListener('click',(e)=>{
         e.stopPropagation();
+        if(editingEventId) return; // 수정 중에는 달력 날짜 선택 비활성화
         if(tapFirst===null){
           // 1번째 탭: 단일 날짜 선택
           tapFirst=dateStr;
@@ -828,6 +833,14 @@
       addBtn.after(cancelBtn);
     }
     cancelBtn.style.display='';
+    // 날짜 직접 입력 필드 표시
+    const dateRow=document.getElementById('editDateRow');
+    dateRow.style.display='flex';
+    document.getElementById('editStartDate').value=ev.startDate;
+    document.getElementById('editEndDate').value=ev.endDate;
+    // 달력 그리드 비활성화
+    document.getElementById('daysGrid').classList.add('editing-mode');
+    ['prevBtn','nextBtn','todayBtn'].forEach(id=>document.getElementById(id).disabled=true);
     // 폼으로 스크롤
     document.getElementById('eventInput').scrollIntoView({behavior:'smooth',block:'center'});
     document.getElementById('eventInput').focus();
@@ -842,6 +855,10 @@
     document.getElementById('eventFrom').value='0';
     document.getElementById('eventTo').value='0';
     document.getElementById('importantCheck').checked=false;
+    // 날짜 입력 필드 숨김 + 달력 복원
+    document.getElementById('editDateRow').style.display='none';
+    document.getElementById('daysGrid').classList.remove('editing-mode');
+    ['prevBtn','nextBtn','todayBtn'].forEach(id=>document.getElementById(id).disabled=false);
   }
   async function apiUpdateEvent(id, updated){
     if(localMode){
@@ -1008,6 +1025,17 @@
   document.getElementById('noticeBtn').addEventListener('click',openNoticeModal);
   document.getElementById('noticeCloseBtn').addEventListener('click',closeNoticeModal);
   document.getElementById('noticeAddBtn').addEventListener('click',addNotice);
+  // 수정 모드 날짜 직접 입력 핸들러
+  document.getElementById('editStartDate').addEventListener('change',e=>{
+    selectedStart=e.target.value;
+    if(selectedEnd<selectedStart){ selectedEnd=selectedStart; document.getElementById('editEndDate').value=selectedStart; }
+    updateSelectedLabel(); renderCalendar();
+  });
+  document.getElementById('editEndDate').addEventListener('change',e=>{
+    selectedEnd=e.target.value;
+    if(selectedEnd<selectedStart){ selectedStart=selectedEnd; document.getElementById('editStartDate').value=selectedEnd; }
+    updateSelectedLabel(); renderCalendar();
+  });
   document.getElementById('noticeModal').addEventListener('click',e=>{
     if(e.target===document.getElementById('noticeModal'))closeNoticeModal();
   });

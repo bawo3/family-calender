@@ -157,7 +157,12 @@ body.dark .b-item.in-progress{background:rgba(46,204,113,0.15);}
 .modal-btn.primary:hover{background:var(--accent-dark);}
 .modal-btn.cancel{background:var(--chip-bg);color:var(--text-base);border:1px solid var(--border);}
 .modal-btn.cancel:hover{background:var(--chip-hover);}
-.notice-list-section{margin-top:16px;border-top:1px solid var(--border);padding-top:12px;}
+/* 수정 모드 날짜 직접 입력 */
+.edit-date-row{display:none;align-items:center;gap:6px;flex-wrap:wrap;margin:6px 0;padding:8px;background:var(--item-bg);border-radius:6px;border:1px dashed var(--accent);}
+.edit-date-row input[type=date]{padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;background:var(--input-bg);color:var(--text-base);}
+/* 수정 중 달력 그리드 비활성화 */
+.days.editing-mode{opacity:0.45;pointer-events:none;}
+.notice-list-section{margin-top:0;border-top:none;padding-top:0;margin-bottom:12px;}
 .notice-list-section h3{font-size:13px;color:var(--text-secondary);margin-bottom:10px;}
 .notice-item{background:var(--item-bg);border-radius:6px;padding:10px;margin-bottom:8px;border-left:4px solid var(--accent);position:relative;}
 .notice-meta{font-size:11px;color:var(--text-secondary);margin-bottom:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
