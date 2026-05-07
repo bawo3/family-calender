@@ -116,7 +116,7 @@
   .range-info{font-size:12px;color:var(--text-secondary);margin-bottom:10px;}
   .event-form{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;}
   .event-form input[type="text"]{flex:1;min-width:180px;padding:8px;border:1px solid var(--border);border-radius:4px;font-size:14px;background:var(--input-bg);color:var(--text-base);}
-  .event-form input[type="time"]{padding:7px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--input-bg);color:var(--text-base);}
+  .event-form select.hour-select{padding:7px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--input-bg);color:var(--text-base);min-width:64px;}
   .event-form .time-label{font-size:12px;color:var(--text-secondary);}
   .event-form button{background:#27ae60;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;}
   .event-form button:hover{background:#1e8449;}
@@ -218,12 +218,12 @@
     <h2 id="selectedDateLabel">날짜를 선택하세요</h2>
     <div class="range-info" id="rangeInfo"></div>
     <div class="event-form">
-      <input type="text" id="eventInput" placeholder="일정 내용을 입력하세요" disabled>
       <span class="time-label">시작</span>
-      <input type="time" id="eventFrom" disabled>
+      <select id="eventFrom" class="hour-select" disabled></select>
       <span class="time-label">~ 종료</span>
-      <input type="time" id="eventTo" disabled>
-      <label class="important-check"><input type="checkbox" id="importantCheck" disabled> ⭐ 매우중요</label>
+      <select id="eventTo" class="hour-select" disabled></select>
+      <input type="text" id="eventInput" placeholder="일정 내용을 입력하세요" disabled>
+      <label class="important-check"><input type="checkbox" id="importantCheck" disabled> ⭐ 중요</label>
       <button id="addBtn" disabled>추가</button>
     </div>
     <ul class="event-list" id="eventList"></ul>
@@ -293,7 +293,22 @@
   function makeId(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
   function formatDate(y,m,d){ return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
   function todayStr(){ const t=new Date();return formatDate(t.getFullYear(),t.getMonth(),t.getDate()); }
-  function formatTimeRange(f,t){ return(f&&t)?`${f}~${t}`:f?`${f}~`:t?`~${t}`:''; }
+  // 시간 표기: 신규는 "H" 시 정수, 구버전 "HH:MM" 호환
+  function formatTimeRange(f,t){
+    const fmt=v=>{
+      if(v===''||v==null)return'';
+      const s=String(v);
+      if(s.includes(':'))return parseInt(s.split(':')[0],10)+'시';
+      return parseInt(s,10)+'시';
+    };
+    return(f&&t)?`${fmt(f)}~${fmt(t)}`:f?`${fmt(f)}~`:t?`~${fmt(t)}`:'';
+  }
+  // 0~23시 옵션 채우기
+  function fillHourOptions(){
+    const opts='<option value="">시간</option>'+Array.from({length:24},(_,h)=>`<option value="${h}">${h}시</option>`).join('');
+    document.getElementById('eventFrom').innerHTML=opts;
+    document.getElementById('eventTo').innerHTML=opts;
+  }
   function minDate(a,b){return a<b?a:b;} function maxDate(a,b){return a>b?a:b;}
   function dateInRange(d,s,e){const lo=minDate(s,e),hi=maxDate(s,e);return d>=lo&&d<=hi;}
   function rangesOverlap(as,ae,bs,be){return as<=be&&bs<=ae;}
@@ -493,9 +508,12 @@
       }
       cell.addEventListener('click',()=>{
         if(!isDragging){
+          // 첫 탭: 당일 일정으로 즉시 활성화
           isDragging=true;dragStart=dateStr;dragEnd=dateStr;
-          renderCalendar();renderEventList();
+          selectedStart=dateStr;selectedEnd=dateStr;
+          activateInputs();updateSelectedLabel();renderCalendar();renderEventList();
         }else{
+          // 두번째 탭: 낮은 일자=시작, 높은 일자=종료 (기간 일정)
           isDragging=false;
           selectedStart=minDate(dragStart,dateStr);selectedEnd=maxDate(dragStart,dateStr);
           dragStart=dragEnd=null;activateInputs();updateSelectedLabel();renderCalendar();renderEventList();
@@ -545,12 +563,14 @@
     if(!text||!selectedStart||!selectedEnd)return;
     const from=document.getElementById('eventFrom').value,to=document.getElementById('eventTo').value;
     const important=document.getElementById('importantCheck').checked;
-    if(selectedStart===selectedEnd&&from&&to&&to<from){alert('종료 시간이 시작 시간보다 빠를 수 없습니다.');return;}
+    if(selectedStart===selectedEnd&&from&&to&&parseInt(to,10)<parseInt(from,10)){alert('종료 시간이 시작 시간보다 빠를 수 없습니다.');return;}
     const events=loadEvents();
     events.push({id:makeId(),user:currentUser,color:currentUserColor,text,startDate:selectedStart,endDate:selectedEnd,from,to,important});
     saveEvents(events);
     input.value='';document.getElementById('eventFrom').value='';document.getElementById('eventTo').value='';
     document.getElementById('importantCheck').checked=false;
+    // 추가 후 선택 상태 리셋: 다음 탭은 새로운 1차 탭으로 동작
+    isDragging=false;dragStart=null;dragEnd=null;
     renderCalendar();renderEventList();
   }
   function deleteEvent(id){
@@ -607,6 +627,7 @@
   ['eventInput','eventFrom','eventTo'].forEach(id=>document.getElementById(id).addEventListener('keypress',e=>{if(e.key==='Enter')addEvent();}));
 
   // 초기화
+  fillHourOptions();
   renderColorPalette();
   renderSavedUsers();
   const savedName=localStorage.getItem(KEY_CURRENT);
