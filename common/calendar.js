@@ -429,17 +429,13 @@
     const events=loadEvents(),grid=document.getElementById('daysGrid');
     grid.innerHTML='';
     for(let i=0;i<firstDay;i++){const e=document.createElement('div');e.className='day empty';grid.appendChild(e);}
-    const dragLo=null, dragHi=null; // 호버 프리뷰 제거 (클릭 안정성 우선)
     for(let day=1;day<=lastDate;day++){
       const cell=document.createElement('div');cell.className='day';
       const dateStr=formatDate(year,month,day);cell.dataset.date=dateStr;
       const wd=new Date(year,month,day).getDay();
       if(wd===0)cell.classList.add('sun');if(wd===6)cell.classList.add('sat');
       if(dateStr===today)cell.classList.add('today');
-      if(isDragging&&dragLo){
-        if(dateStr===dragLo||dateStr===dragHi)cell.classList.add('range-edge');
-        else if(dateStr>dragLo&&dateStr<dragHi)cell.classList.add('range');
-      }else if(selectedStart&&selectedEnd){
+      if(selectedStart&&selectedEnd){
         const lo=minDate(selectedStart,selectedEnd),hi=maxDate(selectedStart,selectedEnd);
         if(selectedStart===selectedEnd&&dateStr===selectedStart)cell.classList.add('selected');
         else if(dateStr===lo||dateStr===hi)cell.classList.add('range-edge');
