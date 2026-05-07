@@ -142,6 +142,7 @@
   let currentUser=null, currentUserColor=null, currentUserSkin='light';
   let selectedStart=null, selectedEnd=null;
   let tapFirst=null; // 1번째 탭 날짜 (null=미선택, string=2번째 탭 대기 중)
+  let editingEventId=null; // 수정 중인 일정 ID (null=추가 모드)
 
   // 메모리 캐시 — DB 호출 결과를 보관해서 렌더 함수는 동기적으로 동작
   const cache = { events:[], users:{}, allUsers:{}, notices:[] };
@@ -552,15 +553,72 @@
         const tb=document.createElement('span');tb.className='event-time';
         tb.textContent=`⏰ ${ts}`;content.appendChild(tb);
       }
+      const btnWrap=document.createElement('div');btnWrap.className='event-btn-wrap';
+      if(ev.user===currentUser){
+        const editBtn=document.createElement('button');editBtn.className='edit-btn';editBtn.textContent='수정';
+        editBtn.addEventListener('click',()=>startEdit(ev));
+        btnWrap.appendChild(editBtn);
+      }
       const btn=document.createElement('button');btn.className='delete-btn';btn.textContent='삭제';
       btn.addEventListener('click',()=>deleteEvent(ev.id));
-      li.appendChild(content);li.appendChild(btn);list.appendChild(li);
+      btnWrap.appendChild(btn);
+      li.appendChild(content);li.appendChild(btnWrap);list.appendChild(li);
     });
   }
 
   // -----------------------------------------
-  // 8) 일정 추가/삭제 (async)
+  // 8) 일정 추가/수정/삭제 (async)
   // -----------------------------------------
+  function startEdit(ev){
+    // 폼에 기존 데이터 채우기
+    selectedStart=ev.startDate; selectedEnd=ev.endDate; tapFirst=null;
+    document.getElementById('eventInput').value=ev.text;
+    document.getElementById('eventFrom').value=ev.from||'0';
+    document.getElementById('eventTo').value=ev.to||'0';
+    document.getElementById('importantCheck').checked=!!ev.important;
+    activateInputs(); updateSelectedLabel(); renderCalendar(); renderEventList();
+    // 추가 버튼 → 수정 완료로 변경
+    editingEventId=ev.id;
+    const addBtn=document.getElementById('addBtn');
+    addBtn.textContent='수정 완료';addBtn.style.background='#27ae60';
+    // 수정 취소 버튼 표시
+    let cancelBtn=document.getElementById('editCancelBtn');
+    if(!cancelBtn){
+      cancelBtn=document.createElement('button');cancelBtn.id='editCancelBtn';
+      cancelBtn.textContent='취소';cancelBtn.style.cssText='margin-left:6px;background:#95a5a6;color:#fff;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:14px;';
+      cancelBtn.addEventListener('click',cancelEdit);
+      addBtn.after(cancelBtn);
+    }
+    cancelBtn.style.display='';
+    // 폼으로 스크롤
+    document.getElementById('eventInput').scrollIntoView({behavior:'smooth',block:'center'});
+    document.getElementById('eventInput').focus();
+  }
+  function cancelEdit(){
+    editingEventId=null;
+    const addBtn=document.getElementById('addBtn');
+    addBtn.textContent='추가';addBtn.style.background='';
+    const cancelBtn=document.getElementById('editCancelBtn');
+    if(cancelBtn)cancelBtn.style.display='none';
+    document.getElementById('eventInput').value='';
+    document.getElementById('eventFrom').value='0';
+    document.getElementById('eventTo').value='0';
+    document.getElementById('importantCheck').checked=false;
+  }
+  async function apiUpdateEvent(id, updated){
+    if(localMode){
+      const evs=lsGet(LS_EVENTS,[]).map(e=>e.id===id?{...e,...updated}:e);
+      lsSet(LS_EVENTS,evs);
+      cache.events=cache.events.map(e=>e.id===id?{...e,...updated}:e);
+      return;
+    }
+    // PUT으로 전체 배열 교체
+    const evs=cache.events.map(e=>e.id===id?{...e,...updated}:e);
+    await fetchJSON(`${API}/events?prefix=${encodeURIComponent(PREFIX)}`,{
+      method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(evs)
+    });
+    cache.events=evs;
+  }
   async function addEvent(){
     const input=document.getElementById('eventInput'),text=input.value.trim();
     if(!text||!selectedStart||!selectedEnd)return;
@@ -570,18 +628,25 @@
     if(selectedStart===selectedEnd&&from&&to&&parseInt(to,10)<parseInt(from,10)){
       alert('종료 시간이 시작 시간보다 빠를 수 없습니다.');return;
     }
-    const newEv={id:makeId(),user:currentUser,color:currentUserColor,text,startDate:selectedStart,endDate:selectedEnd,from,to,important};
     const addBtn=document.getElementById('addBtn');addBtn.disabled=true;
     try{
-      await apiAddEvent(newEv);
-      input.value='';
-      document.getElementById('eventFrom').value='0';
-      document.getElementById('eventTo').value='0';
-      document.getElementById('importantCheck').checked=false;
-      tapFirst=null;
+      if(editingEventId){
+        // 수정 모드
+        await apiUpdateEvent(editingEventId,{text,startDate:selectedStart,endDate:selectedEnd,from,to,important});
+        cancelEdit();
+      }else{
+        // 추가 모드
+        const newEv={id:makeId(),user:currentUser,color:currentUserColor,text,startDate:selectedStart,endDate:selectedEnd,from,to,important};
+        await apiAddEvent(newEv);
+        input.value='';
+        document.getElementById('eventFrom').value='0';
+        document.getElementById('eventTo').value='0';
+        document.getElementById('importantCheck').checked=false;
+        tapFirst=null;
+      }
       renderCalendar();renderEventList();
     }catch(e){
-      alert('일정 추가 실패: '+e.message);console.error(e);
+      alert((editingEventId?'수정':'일정 추가')+' 실패: '+e.message);console.error(e);
     }finally{
       addBtn.disabled=false;
     }

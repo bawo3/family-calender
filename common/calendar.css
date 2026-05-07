@@ -138,6 +138,9 @@ body.dark .b-item.in-progress{background:rgba(46,204,113,0.15);}
 .event-user{font-size:12px;font-weight:bold;color:#fff;padding:2px 8px;border-radius:10px;white-space:nowrap;}
 .event-text{font-size:14px;color:var(--text-base);}
 .event-important-badge{font-size:11px;background:#e74c3c;color:#fff;border-radius:3px;padding:1px 5px;}
+.event-btn-wrap{display:flex;flex-direction:column;gap:4px;flex-shrink:0;}
+.edit-btn{background:#3498db;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:12px;}
+.edit-btn:hover{background:#2874a6;}
 .delete-btn{background:#e74c3c;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:12px;}
 .delete-btn:hover{background:#c0392b;}
 .empty-msg{color:var(--empty-msg);font-size:14px;padding:8px;}
