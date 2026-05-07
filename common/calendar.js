@@ -983,6 +983,13 @@
     matched.forEach(ev=>{
       const li=document.createElement('li');li.style.borderLeftColor=ev.color||'#95a5a6';
       const content=document.createElement('div');content.className='event-content';
+      // 날짜(요일) 라인 — 항상 맨 위 (단일/범위 모두 표시)
+      const dateLine=document.createElement('div');
+      dateLine.className='event-date-line';
+      dateLine.textContent = ev.startDate===ev.endDate
+        ? `📅 ${dateWithWeekday(ev.startDate)}`
+        : `📅 ${dateWithWeekday(ev.startDate)} ~ ${dateWithWeekday(ev.endDate)}`;
+      content.appendChild(dateLine);
       if(ev.important){
         const imp=document.createElement('span');imp.className='event-important-badge';
         imp.textContent='⭐중요';content.appendChild(imp);
@@ -996,13 +1003,6 @@
         const tb=document.createElement('span');tb.className='event-time';
         tb.textContent=`⏰ ${ts}`;content.appendChild(tb);
       }
-      // 내용 아래 날짜(요일) 라인 — 단일/범위 모두 표시
-      const dateLine=document.createElement('div');
-      dateLine.className='event-date-line';
-      dateLine.textContent = ev.startDate===ev.endDate
-        ? `📅 ${dateWithWeekday(ev.startDate)}`
-        : `📅 ${dateWithWeekday(ev.startDate)} ~ ${dateWithWeekday(ev.endDate)}`;
-      content.appendChild(dateLine);
       const btnWrap=document.createElement('div');btnWrap.className='event-btn-wrap';
       if(ev.user===currentUser){
         const editBtn=document.createElement('button');editBtn.className='edit-btn';editBtn.textContent='수정';
