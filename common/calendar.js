@@ -202,13 +202,20 @@
   // -----------------------------------------
   // 3) 상수 / 상태
   // -----------------------------------------
+  // 12개의 명확히 구분되는 색상 (관리자 페이지와 동일 — 비슷한 색 없이)
   const COLOR_PALETTE = [
-    '#fadbd8','#f5b7b1','#f1948a','#ec7063','#e74c3c','#c0392b',
-    '#fdebd0','#fad7a0','#f8c471','#f5b041','#f39c12','#d68910',
-    '#fcf3cf','#f9e79f','#f7dc6f','#f4d03f','#f1c40f','#b7950b',
-    '#d4efdf','#a9dfbf','#7dcea0','#52be80','#27ae60','#1e8449',
-    '#d6eaf8','#aed6f1','#85c1e9','#5dade2','#3498db','#2874a6',
-    '#e8daef','#d2b4de','#bb8fce','#a569bd','#8e44ad','#6c3483'
+    '#e74c3c', // 빨강
+    '#e67e22', // 주황
+    '#f1c40f', // 노랑
+    '#a3cb38', // 라임
+    '#27ae60', // 초록
+    '#1abc9c', // 청록
+    '#3498db', // 하늘
+    '#2c3e50', // 네이비
+    '#9b59b6', // 보라
+    '#e84393', // 분홍
+    '#795548', // 갈색
+    '#7f8c8d'  // 회색
   ];
 
   let currentDate=new Date(), selectedColor=null, selectedSkin='dark';
@@ -427,13 +434,33 @@
   // -----------------------------------------
   // 6) 로그인 화면 UI
   // -----------------------------------------
+  // 캘린더 내 다른 사용자가 쓰고 있는 색은 팔레트에서 숨김 (자기 색은 유지)
   function renderColorPalette(){
-    const el=document.getElementById('colorPalette');el.innerHTML='';
+    const el=document.getElementById('colorPalette');
+    if(!el) return;
+    el.innerHTML='';
+    const typedName = document.getElementById('nameInput')?.value.trim();
+    const ownColor = typedName && cache.users[typedName]?.color;
+    const usedColors = new Set(
+      Object.entries(cache.users)
+        .filter(([n]) => n !== typedName) // 본인은 제외
+        .map(([_, u]) => u.color)
+        .filter(Boolean)
+    );
     COLOR_PALETTE.forEach(c=>{
+      if(usedColors.has(c)) return; // 다른 사용자가 쓰는 색 숨김
       const cell=document.createElement('div');cell.className='color-cell';
       cell.style.background=c;cell.dataset.color=c;
+      if(c===selectedColor) cell.classList.add('active');
       cell.addEventListener('click',()=>pickColor(c));el.appendChild(cell);
     });
+    // 빈 팔레트 — 모든 색이 점유됨
+    if(!el.children.length){
+      const note=document.createElement('div');
+      note.style.cssText='grid-column:1/-1;text-align:center;color:var(--text-secondary);font-size:12px;padding:8px;';
+      note.textContent='사용 가능한 색상이 없습니다.';
+      el.appendChild(note);
+    }
   }
   function pickColor(c){
     selectedColor=c;
@@ -475,6 +502,8 @@
   async function renderSavedUsers(){
     // 인원 제한 상태 반영 — 가득 차면 신규 등록 폼 숨김
     await applyCapacityState();
+    // 색상 팔레트도 다시 그려서 사용 중인 색 반영
+    renderColorPalette();
     const users = loadAllUsers();
     const section=document.getElementById('quickLoginSection');
     const list=document.getElementById('quickLoginList');
@@ -1400,7 +1429,11 @@
   // -----------------------------------------
   document.getElementById('skinLight').addEventListener('click',()=>setLoginSkin('light'));
   document.getElementById('skinDark').addEventListener('click',()=>setLoginSkin('dark'));
-  document.getElementById('nameInput').addEventListener('input',checkLoginReady);
+  document.getElementById('nameInput').addEventListener('input',()=>{
+    checkLoginReady();
+    // 입력한 이름이 기존 사용자면 그 사람의 색을 다시 노출
+    renderColorPalette();
+  });
   document.getElementById('loginBtn').addEventListener('click',login);
   document.getElementById('nameInput').addEventListener('keypress',e=>{
     if(e.key==='Enter'&&!document.getElementById('loginBtn').disabled)login();
