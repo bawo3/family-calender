@@ -129,6 +129,20 @@
   </div>
 </div>
 
+<div class="modal-overlay hidden" id="notifyDeniedModal">
+  <div class="modal-box" style="max-width:400px;">
+    <h2>🔔 알림이 차단되어 있어요</h2>
+    <p style="font-size:14px;color:var(--text-base);line-height:1.6;margin-bottom:12px;">실수로 차단하셨나요?
+아래 방법으로 다시 켤 수 있어요. <strong>변경 즉시 자동 감지됩니다.</strong></p>
+    <div id="deniedInstructions" style="background:var(--item-bg);border-radius:8px;padding:12px 16px;margin-bottom:14px;font-size:13px;line-height:1.8;"></div>
+    <p id="deniedWaiting" style="font-size:12px;color:var(--text-muted);text-align:center;margin-bottom:10px;">⏳ 권한 변경을 감지하는 중...</p>
+    <div class="modal-actions">
+      <button class="modal-btn cancel" id="notifyDeniedCloseBtn">닫기</button>
+      <button class="modal-btn primary" id="notifyDeniedReloadBtn">새로고침</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay hidden" id="noticeModal">
   <div class="modal-box">
     <h2>📢 공지사항</h2>
@@ -468,6 +482,97 @@
     });
   }
 
+  // 사용자 환경(OS/브라우저)별 차단 해제 안내 문구 생성
+  function getDeniedInstructionsHtml(){
+    const ua=navigator.userAgent;
+    const isAndroid=/Android/i.test(ua);
+    const isIOS=/iPhone|iPad|iPod/i.test(ua);
+    const isFirefox=/Firefox/i.test(ua);
+    const isEdge=/Edg/i.test(ua);
+    const isSafari=/Safari/i.test(ua) && !/Chrome|CriOS|FxiOS/i.test(ua);
+    if(isIOS){
+      return `<ol style="margin:0;padding-left:20px;">
+        <li>iOS <strong>설정 앱</strong> 열기</li>
+        <li><strong>Safari</strong> → <strong>고급</strong> → <strong>웹사이트 데이터</strong></li>
+        <li>이 사이트 항목 삭제 후 새로고침</li>
+        <li><em>※ iOS 16.4+ 는 PWA 설치 후 알림 사용 권장</em></li>
+      </ol>`;
+    }
+    if(isAndroid){
+      return `<ol style="margin:0;padding-left:20px;">
+        <li>주소창 오른쪽 <strong>⋮</strong> 메뉴 클릭</li>
+        <li><strong>사이트 설정</strong> 또는 자물쇠 아이콘 선택</li>
+        <li><strong>알림</strong> → <strong>허용</strong>으로 변경</li>
+      </ol>`;
+    }
+    if(isFirefox){
+      return `<ol style="margin:0;padding-left:20px;">
+        <li>주소창 왼쪽 <strong>자물쇠</strong> 아이콘 클릭</li>
+        <li><strong>알림 보내기</strong> 우측 <strong>×</strong> 클릭하여 차단 해제</li>
+      </ol>`;
+    }
+    if(isSafari){
+      return `<ol style="margin:0;padding-left:20px;">
+        <li>상단 메뉴 <strong>Safari</strong> → <strong>설정</strong> (또는 환경설정)</li>
+        <li><strong>웹사이트</strong> 탭 → <strong>알림</strong></li>
+        <li>이 사이트를 <strong>허용</strong>으로 변경</li>
+      </ol>`;
+    }
+    // Chrome/Edge/기타 데스크탑
+    return `<ol style="margin:0;padding-left:20px;">
+      <li>주소창 왼쪽의 <strong>🔒</strong> 또는 <strong>ⓘ</strong> 아이콘 클릭</li>
+      <li><strong>알림</strong> 항목을 <strong>허용</strong>으로 변경</li>
+      <li>아래 <strong>새로고침</strong> 버튼 클릭 (또는 자동 감지 대기)</li>
+    </ol>`;
+  }
+
+  // 차단 안내 모달 — 사용자가 설정에서 권한 변경하면 자동 감지
+  let deniedModalOpen=false;
+  function showNotifyDeniedModal(){
+    const overlay=document.getElementById('notifyDeniedModal');
+    const closeBtn=document.getElementById('notifyDeniedCloseBtn');
+    const reloadBtn=document.getElementById('notifyDeniedReloadBtn');
+    document.getElementById('deniedInstructions').innerHTML=getDeniedInstructionsHtml();
+    overlay.classList.remove('hidden');
+    deniedModalOpen=true;
+    const close=()=>{
+      overlay.classList.add('hidden');
+      deniedModalOpen=false;
+    };
+    closeBtn.addEventListener('click',close,{once:true});
+    reloadBtn.addEventListener('click',()=>location.reload(),{once:true});
+  }
+
+  // 권한이 granted로 바뀌면 자동으로 알림 활성화 + 차단 모달 닫기
+  async function autoEnableOnGranted(){
+    if(Notification.permission!=='granted') return;
+    if(isNotifyOn()) return;
+    localStorage.setItem(KEY_NOTIFY_ON,'1');
+    const seen=getSeenIds();
+    cache.events.forEach(ev=>seen.add(ev.id));
+    cache.notices.forEach(n=>seen.add(n.id));
+    saveSeenIds(seen);
+    await registerPushSubscription();
+    updateAlarmBtn();
+    if(deniedModalOpen){
+      document.getElementById('notifyDeniedModal').classList.add('hidden');
+      deniedModalOpen=false;
+      alert('✅ 알림이 활성화되었습니다!');
+    }
+  }
+
+  // Permissions API로 권한 상태 변화 실시간 감지
+  async function watchNotifyPermission(){
+    if(!('permissions' in navigator)) return;
+    try {
+      const status=await navigator.permissions.query({name:'notifications'});
+      status.addEventListener('change',autoEnableOnGranted);
+    } catch(e){ /* Safari 등 일부 브라우저는 미지원 */ }
+  }
+  watchNotifyPermission();
+  // 페이지 포커스 복귀 시에도 검사 (Permissions API 미지원 환경 대비)
+  window.addEventListener('focus',autoEnableOnGranted);
+
   // 알림이 OFF 상태면 동의/거부 모달 표시 (세션당 1회)
   async function askNotifyIfOff(){
     if(!('Notification' in window)) return;
@@ -549,10 +654,10 @@
     // 켜기
     if(!('Notification' in window)){ alert('이 브라우저는 알림을 지원하지 않습니다.'); return; }
     const perm=Notification.permission;
-    // 이미 차단된 경우 — 브라우저가 requestPermission을 무시하므로 사용자 안내
+    // 이미 차단된 경우 — 브라우저가 requestPermission을 무시하므로 OS별 안내 모달 표시
     if(perm==='denied'){
-      alert('브라우저에서 알림이 차단되어 있습니다.\n주소창의 🔒 아이콘 → 알림 → 허용으로 변경 후 다시 시도해주세요.');
       localStorage.setItem(KEY_NOTIFY_ON,'0'); updateAlarmBtn();
+      showNotifyDeniedModal();
       return;
     }
     const newPerm = perm==='granted' ? 'granted' : await Notification.requestPermission();
