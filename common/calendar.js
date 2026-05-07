@@ -781,29 +781,13 @@
 
   function checkNewItemsAndNotify(){
     if(!isNotifyOn()) return;
-    if(!('Notification' in window)||Notification.permission!=='granted') return;
+    // 새 일정·공지 알림은 서버 → SW push 로 일원화 (앱이 닫혀있어도 동작)
+    // 앱을 켤 때마다 포그라운드에서 또 알림이 뜨는 중복 문제 방지를 위해
+    // 현재 항목을 seen에 기록만 하고 별도 알림은 표시하지 않음.
     const seen=getSeenIds();
-    let changed=false;
-
-    // 새 일정 알림
-    cache.events.forEach(ev=>{
-      if(seen.has(ev.id)) return;
-      const dateLabel=ev.startDate===ev.endDate
-        ? ev.startDate : `${ev.startDate} ~ ${ev.endDate}`;
-      const ts=formatTimeRange(ev.from,ev.to);
-      const body=`${ev.user} · ${dateLabel}${ev.important?' ⭐중요':''}${ts?' · '+ts:''}`;
-      new Notification(`📅 ${ev.text}`,{body, tag:`${PREFIX}_ev_${ev.id}`});
-      seen.add(ev.id); changed=true;
-    });
-
-    // 새 공지 알림
-    cache.notices.forEach(n=>{
-      if(seen.has(n.id)) return;
-      new Notification(`📢 공지`,{body:`${n.user} · ${n.text}`, tag:`${PREFIX}_nt_${n.id}`});
-      seen.add(n.id); changed=true;
-    });
-
-    if(changed) saveSeenIds(seen);
+    cache.events.forEach(ev=>seen.add(ev.id));
+    cache.notices.forEach(n=>seen.add(n.id));
+    saveSeenIds(seen);
   }
   function updateSkinSwitchBtn(){
     document.getElementById('skinSwitchBtn').textContent=currentUserSkin==='dark'?'☀️':'🌙';
