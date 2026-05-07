@@ -111,6 +111,17 @@
   </div>
 </div>
 
+<div class="modal-overlay hidden" id="notifyPermModal">
+  <div class="modal-box" style="max-width:340px;">
+    <h2 id="notifyPermTitle">🔔 알림 설정</h2>
+    <p id="notifyPermBody" style="font-size:14px;color:var(--text-base);line-height:1.7;margin-bottom:16px;white-space:pre-line;"></p>
+    <div class="modal-actions">
+      <button class="modal-btn cancel" id="notifyPermDenyBtn">거부</button>
+      <button class="modal-btn primary" id="notifyPermAllowBtn">동의</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay hidden" id="noticeModal">
   <div class="modal-box">
     <h2>📢 공지사항</h2>
@@ -422,6 +433,37 @@
     btn.style.opacity=on?'1':'0.5';
   }
 
+  // 알림 권한 요청/안내 모달 (Promise<true=동의, false=거부>)
+  function showNotifyPermModal(isDenied) {
+    return new Promise(resolve => {
+      const overlay  = document.getElementById('notifyPermModal');
+      const body     = document.getElementById('notifyPermBody');
+      const denyBtn  = document.getElementById('notifyPermDenyBtn');
+      const allowBtn = document.getElementById('notifyPermAllowBtn');
+
+      if (isDenied) {
+        body.textContent = '브라우저에서 알림이 차단되어 있습니다.\n주소창 왼쪽 🔒 아이콘 → 알림 → 허용으로\n변경 후 새로고침해주세요.';
+        allowBtn.style.display = 'none';
+        denyBtn.textContent = '확인';
+      } else {
+        body.textContent = '새 일정·공지가 등록되면\n알림을 받을 수 있습니다.\n브라우저 알림을 허용하시겠습니까?';
+        allowBtn.style.display = '';
+        denyBtn.textContent = '거부';
+      }
+
+      overlay.classList.remove('hidden');
+
+      const cleanup = result => {
+        overlay.classList.add('hidden');
+        allowBtn.style.display = '';
+        denyBtn.textContent = '거부';
+        resolve(result);
+      };
+      allowBtn.addEventListener('click', () => cleanup(true),  { once: true });
+      denyBtn.addEventListener ('click', () => cleanup(false), { once: true });
+    });
+  }
+
   // VAPID base64url → Uint8Array 변환 (Web Push 구독에 필요)
   function urlBase64ToUint8Array(b64){
     const pad='='.repeat((4-b64.length%4)%4);
@@ -480,46 +522,55 @@
         }
       } catch(e){ console.error('구독 해제 실패:', e); }
       updateAlarmBtn();
-      alert('🔕 이 캘린더 알림이 꺼졌습니다.');
       return;
     }
-    // 켜기 — 권한 요청
-    let perm=Notification.permission;
-    if(perm==='default') perm=await Notification.requestPermission();
-    if(perm!=='granted'){
-      localStorage.setItem(KEY_NOTIFY_ON,'0');
-      alert('브라우저에서 알림을 허용해주세요.\n주소창 왼쪽 🔒 아이콘 → 알림 → 허용');
+    // 켜기
+    if(!('Notification' in window)){ alert('이 브라우저는 알림을 지원하지 않습니다.'); return; }
+    const perm=Notification.permission;
+    if(perm==='denied'){
+      await showNotifyPermModal(true); // 차단 안내
       return;
+    }
+    if(perm==='default'){
+      const agreed=await showNotifyPermModal(false);
+      if(!agreed){ localStorage.setItem(KEY_NOTIFY_ON,'0'); updateAlarmBtn(); return; }
+    }
+    const newPerm = perm==='granted' ? 'granted' : await Notification.requestPermission();
+    if(newPerm!=='granted'){
+      localStorage.setItem(KEY_NOTIFY_ON,'0'); updateAlarmBtn(); return;
     }
     localStorage.setItem(KEY_NOTIFY_ON,'1');
-    // 켜는 시점 이전 내역은 seen 처리 (스팸 방지)
     const seen=getSeenIds();
     cache.events.forEach(ev=>seen.add(ev.id));
     cache.notices.forEach(n=>seen.add(n.id));
     saveSeenIds(seen);
-    await registerPushSubscription(); // 푸시 구독 등록
+    await registerPushSubscription();
     updateAlarmBtn();
-    alert('🔔 이 캘린더 알림이 켜졌습니다!\n새 일정·공지가 등록되면 알림이 옵니다.');
   }
 
   // 최초 방문 시(KEY_NOTIFY_ON=null) 자동으로 알림 켜기 시도
   async function autoEnableNotify(){
     if(!('Notification' in window)) return;
     if(localStorage.getItem(KEY_NOTIFY_ON)!==null) return; // 이미 설정됨 → skip
-    // 첫 방문 — 권한 요청
-    let perm=Notification.permission;
-    if(perm==='default') perm=await Notification.requestPermission();
-    if(perm==='granted'){
-      localStorage.setItem(KEY_NOTIFY_ON,'1');
-      // 이미 등록된 내역은 모두 seen 처리 (스팸 방지)
-      const seen=getSeenIds();
-      cache.events.forEach(ev=>seen.add(ev.id));
-      cache.notices.forEach(n=>seen.add(n.id));
-      saveSeenIds(seen);
-      await registerPushSubscription(); // 푸시 구독 등록
-    } else {
-      localStorage.setItem(KEY_NOTIFY_ON,'0'); // 거부됨 → 다음 방문에 재요청 안 함
+    const perm=Notification.permission;
+    if(perm==='denied'){
+      await showNotifyPermModal(true); // 차단 안내
+      localStorage.setItem(KEY_NOTIFY_ON,'0');
+      updateAlarmBtn(); return;
     }
+    if(perm==='default'){
+      const agreed=await showNotifyPermModal(false);
+      if(!agreed){ localStorage.setItem(KEY_NOTIFY_ON,'0'); updateAlarmBtn(); return; }
+      const newPerm=await Notification.requestPermission();
+      if(newPerm!=='granted'){ localStorage.setItem(KEY_NOTIFY_ON,'0'); updateAlarmBtn(); return; }
+    }
+    // granted
+    localStorage.setItem(KEY_NOTIFY_ON,'1');
+    const seen=getSeenIds();
+    cache.events.forEach(ev=>seen.add(ev.id));
+    cache.notices.forEach(n=>seen.add(n.id));
+    saveSeenIds(seen);
+    await registerPushSubscription();
     updateAlarmBtn();
   }
 
