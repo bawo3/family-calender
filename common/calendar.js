@@ -399,9 +399,10 @@
     document.getElementById('userName').textContent=currentUser;
     document.getElementById('userDot').style.background=currentUserColor;
     updateSkinSwitchBtn();renderCalendar();renderEventList();
-    // 공지 있으면 자동 팝업 (첫 로딩 시만) — 공지 닫힐 때 알림 권한 체크로 이어짐
+    // 알림 권한 거부 체크 먼저 (공지보다 우선 — 모달 충돌 방지)
+    if(autoNotice) await syncNotifyPermission();
+    // 공지 있으면 자동 팝업 (첫 로딩 시만)
     if(autoNotice&&cache.notices.length>0) openNoticeModal();
-    else if(autoNotice) syncNotifyPermission(); // 공지 없으면 바로 권한 체크
     // 최초 방문 시 알림 자동 활성화 시도 (KEY_NOTIFY_ON이 null인 경우만)
     if(autoNotice) await autoEnableNotify();
     // 이미 ON인 경우 SW 재등록 (브라우저 재시작 후 SW가 사라질 수 있음)
@@ -435,15 +436,15 @@
   }
 
   // 외부(시스템 설정/안드로이드 알림 트레이)에서 권한이 변경된 경우 상태 동기화
-  function syncNotifyPermission(){
+  async function syncNotifyPermission(){
     if(!('Notification' in window)) return;
     if(Notification.permission==='denied'){
       const stored=localStorage.getItem(KEY_NOTIFY_ON);
       // 명시적으로 끈 경우('0')가 아니면 → 거부 안내 모달 표시
       if(stored!=='0'){
-        localStorage.setItem(KEY_NOTIFY_ON,'0'); // null 또는 '1' → '0' 으로 동기화
+        localStorage.setItem(KEY_NOTIFY_ON,'0');
         updateAlarmBtn();
-        showNotifyPermModal(true);
+        await showNotifyPermModal(true); // 모달 닫힐 때까지 대기
       }
     }
   }
@@ -906,7 +907,6 @@
   function closeNoticeModal(){
     document.getElementById('noticeModal').classList.add('hidden');
     document.getElementById('noticeTextInput').value='';
-    syncNotifyPermission(); // 공지 닫힌 후 알림 권한 거부 여부 체크
   }
   async function addNotice(){
     const text=document.getElementById('noticeTextInput').value.trim();if(!text)return;
