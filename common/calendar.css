@@ -85,6 +85,7 @@ body.dark .important-banner .b-title{color:#f07060;}
 body.dark .important-banner .b-item{border-top-color:rgba(255,255,255,0.08);}
 .b-user-badge{border-radius:8px;padding:1px 7px;font-size:11px;white-space:nowrap;color:#fff;}
 .b-range{font-size:11px;color:var(--text-secondary);}
+.b-range-ip{font-size:12px;font-weight:bold;color:var(--text-primary);}
 .b-section-title{font-size:11px;font-weight:bold;color:#e05040;margin:4px 0 3px;letter-spacing:0.3px;}
 body.dark .b-section-title{color:#f07060;}
 .b-section-gap{margin-top:10px;padding-top:8px;border-top:1px solid rgba(0,0,0,0.07);}

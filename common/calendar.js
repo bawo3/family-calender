@@ -406,7 +406,7 @@
       const ts=formatTimeRange(ev.from,ev.to);
       const text=document.createElement('span');
       text.innerHTML=ev.text+(ts?` <span class="b-time">${ts}</span>`:'');
-      const range=document.createElement('span');range.className='b-range';
+      const range=document.createElement('span');range.className='b-range'+(isIP?' b-range-ip':'');
       range.textContent=ev.startDate===ev.endDate?ev.startDate:`${ev.startDate}~${ev.endDate}`;
       item.appendChild(badge);item.appendChild(text);item.appendChild(range);return item;
     };
