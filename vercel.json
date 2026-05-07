@@ -7,5 +7,11 @@
         { "key": "Content-Type",  "value": "application/javascript" }
       ]
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/notify-tomorrow",
+      "schedule": "0 12 * * *"
+    }
   ]
 }
