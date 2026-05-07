@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>가족 캘린더</title>
+<style>
+  /* ===== CSS 변수: 라이트 스킨 ===== */
+  :root {
+    --accent:          #3498db;
+    --accent-dark:     #2874a6;
+    --body-bg:         #f4f6f8;
+    --card-bg:         #ffffff;
+    --card-shadow:     0 2px 12px rgba(0,0,0,0.08);
+    --text-primary:    #2c3e50;
+    --text-secondary:  #7f8c8d;
+    --text-base:       #333333;
+    --border:          #dddddd;
+    --weekday-bg:      #ecf0f1;
+    --day-bg:          #fafafa;
+    --day-hover:       #eaf4fc;
+    --panel-bg:        #f8f9fa;
+    --input-bg:        #ffffff;
+    --item-bg:         #ffffff;
+    --chip-bg:         #f8f9fa;
+    --chip-hover:      #ecf0f1;
+    --help-border:     #3498db;
+    --time-badge-bg:   #ecf0f1;
+    --time-badge-text: #555555;
+    --range-badge-bg:  #fef9e7;
+    --range-badge-text:#b9770e;
+    --empty-msg:       #999999;
+    --skin-btn-border: #dddddd;
+  }
+  /* ===== CSS 변수: 다크 스킨 ===== */
+  body.dark {
+    --accent:          #5588ff;
+    --accent-dark:     #3366cc;
+    --body-bg:         #0f0f1a;
+    --card-bg:         #1a1a2e;
+    --card-shadow:     0 2px 16px rgba(0,0,0,0.5);
+    --text-primary:    #e0e0f0;
+    --text-secondary:  #8888aa;
+    --text-base:       #ccccdd;
+    --border:          #2e2e4e;
+    --weekday-bg:      #12122a;
+    --day-bg:          #16162c;
+    --day-hover:       #1e1e3a;
+    --panel-bg:        #12122a;
+    --input-bg:        #1e1e3a;
+    --item-bg:         #1e1e3a;
+    --chip-bg:         #1e1e3a;
+    --chip-hover:      #28284a;
+    --help-border:     #5588ff;
+    --time-badge-bg:   #2a2a4a;
+    --time-badge-text: #aaaacc;
+    --range-badge-bg:  #2a240a;
+    --range-badge-text:#f0c060;
+    --empty-msg:       #666688;
+    --skin-btn-border: #2e2e4e;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+    background: var(--body-bg);
+    color: var(--text-base);
+    padding: 20px;
+    user-select: none;
+    transition: background 0.3s, color 0.3s;
+  }
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    background: var(--card-bg);
+    border-radius: 12px;
+    box-shadow: var(--card-shadow);
+    padding: 24px;
+    transition: background 0.3s;
+  }
+  /* 홈으로 돌아가기 링크 */
+  .back-link {
+    display: inline-block;
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .back-link:hover { text-decoration: underline; }
+
+  /* ===== 로그인 화면 ===== */
+  .login-box {
+    max-width: 480px;
+    margin: 20px auto;
+    background: var(--card-bg);
+    border-radius: 12px;
+    box-shadow: var(--card-shadow);
+    padding: 32px;
+    transition: background 0.3s;
+  }
+  .login-box h1 { font-size: 22px; color: var(--text-primary); margin-bottom: 4px; text-align: center; }
+  .login-box > p { color: var(--text-secondary); font-size: 13px; margin-bottom: 20px; text-align: center; }
+  .login-box label { display: block; font-size: 13px; font-weight: bold; color: var(--text-primary); margin: 14px 0 6px; }
+  .login-box input[type="text"] {
+    width: 100%; padding: 10px;
+    border: 1px solid var(--border); border-radius: 6px;
+    font-size: 14px; background: var(--input-bg); color: var(--text-base);
+    transition: background 0.3s, border-color 0.3s;
+  }
+
+  /* 스킨 선택 */
+  .skin-toggle { display: flex; gap: 8px; margin-top: 6px; }
+  .skin-btn {
+    flex: 1; padding: 10px;
+    border: 2px solid var(--skin-btn-border); border-radius: 8px;
+    background: var(--chip-bg); color: var(--text-base);
+    cursor: pointer; font-size: 14px; text-align: center;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .skin-btn:hover { border-color: var(--accent); }
+  .skin-btn.active { border-color: var(--accent); background: var(--day-hover); font-weight: bold; color: var(--text-primary); }
+
+  /* 색상 팔레트 */
+  .color-palette { display: grid; grid-template-columns: repeat(6,1fr); gap: 6px; margin-top: 6px; }
+  .color-cell { aspect-ratio:1; border-radius:6px; cursor:pointer; border:2px solid transparent; transition:transform .15s, border-color .15s; }
+  .color-cell:hover { transform: scale(1.1); }
+  .color-cell.active { border-color: var(--text-primary); transform: scale(1.1); box-shadow: 0 0 0 2px var(--card-bg) inset; }
+  .selected-color-info { margin-top:10px; font-size:13px; color:var(--text-secondary); display:flex; align-items:center; gap:8px; }
+  .selected-color-swatch { width:20px; height:20px; border-radius:4px; border:1px solid var(--border); }
+
+  .login-btn {
+    width:100%; margin-top:20px; background:var(--accent); color:#fff;
+    border:none; padding:12px; border-radius:6px; cursor:pointer;
+    font-size:15px; font-weight:bold; transition:background 0.2s;
+  }
+  .login-btn:hover { background: var(--accent-dark); }
+  .login-btn:disabled { background:#666; cursor:not-allowed; }
+
+  /* 저장된 사용자 */
+  .saved-users { margin-top:16px; padding-top:16px; border-top:1px solid var(--border); }
+  .saved-users h3 { font-size:13px; color:var(--text-secondary); margin-bottom:8px; }
+  .saved-user-list { display:flex; flex-wrap:wrap; gap:6px; }
+  .saved-user-chip {
+    display:inline-flex; align-items:center; gap:6px;
+    background:var(--chip-bg); border:1px solid var(--border); border-radius:16px;
+    padding:4px 10px; font-size:12px; cursor:pointer; color:var(--text-base);
+    transition:background 0.15s;
+  }
+  .saved-user-chip:hover { background:var(--chip-hover); }
+  .saved-user-chip .dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .saved-user-chip .skin-icon { font-size:11px; opacity:0.7; }
+
+  /* ===== 캘린더 화면 ===== */
+  .top-bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px; }
+  .top-bar h1 { font-size:22px; color:var(--text-primary); }
+  .top-bar button { background:var(--accent); color:#fff; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; font-size:14px; }
+  .top-bar button:hover { background:var(--accent-dark); }
+  .nav { display:flex; gap:8px; align-items:center; }
+  .nav .month-label { font-size:18px; font-weight:bold; min-width:130px; text-align:center; color:var(--text-primary); }
+
+  .user-info {
+    display:flex; align-items:center; gap:8px;
+    background:var(--panel-bg); padding:6px 12px; border-radius:20px;
+    font-size:13px; border:1px solid var(--border);
+  }
+  .user-info .user-dot { width:14px; height:14px; border-radius:50%; border:1px solid rgba(128,128,128,0.3); flex-shrink:0; }
+  .user-info .skin-switch-btn { background:var(--chip-bg); color:var(--text-base); border:1px solid var(--border); padding:3px 8px; border-radius:4px; cursor:pointer; font-size:12px; }
+  .user-info .skin-switch-btn:hover { background:var(--chip-hover); }
+  .user-info .logout-btn { background:#e74c3c; color:#fff; border:none; padding:4px 10px; border-radius:4px; cursor:pointer; font-size:12px; }
+  .user-info .logout-btn:hover { background:#c0392b; }
+
+  .help-msg {
+    font-size:12px; color:var(--text-secondary); margin-bottom:10px;
+    padding:8px 10px; background:var(--panel-bg); border-radius:6px;
+    border:1px solid var(--border); border-left:3px solid var(--help-border);
+  }
+
+  /* 요일 헤더 */
+  .weekdays { display:grid; grid-template-columns:repeat(7,1fr); background:var(--weekday-bg); border-radius:6px; overflow:hidden; }
+  .weekdays div { padding:10px; text-align:center; font-weight:bold; font-size:14px; color:var(--text-primary); }
+  .weekdays .sun { color:#e74c3c; }
+  .weekdays .sat { color:#3498db; }
+
+  /* 날짜 그리드 */
+  .days { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-top:4px; }
+  .day { min-height:100px; background:var(--day-bg); border-radius:6px; padding:6px; cursor:pointer; transition:background 0.15s; border:1px solid transparent; overflow:hidden; }
+  .day:hover { background:var(--day-hover); }
+  .day.empty { background:transparent; cursor:default; }
+  .day.today { border-color:var(--accent); }
+  .day.selected { background:var(--day-hover); border-color:var(--accent-dark); }
+  .day.range { background:rgba(243,156,18,0.12); border-color:rgba(243,156,18,0.4); }
+  .day.range-edge { background:rgba(243,156,18,0.28); border-color:#e67e22; }
+  .day .date-num { font-size:14px; font-weight:bold; margin-bottom:4px; color:var(--text-primary); }
+  .day.sun .date-num { color:#e74c3c; }
+  .day.sat .date-num { color:#3498db; }
+  .event-dot { color:#fff; font-size:11px; padding:2px 5px; border-radius:3px; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  /* 일정 패널 */
+  .event-panel { margin-top:20px; padding:16px; background:var(--panel-bg); border-radius:8px; border:1px solid var(--border); }
+  .event-panel h2 { font-size:16px; margin-bottom:4px; color:var(--text-primary); }
+  .range-info { font-size:12px; color:var(--text-secondary); margin-bottom:10px; }
+  .event-form { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:center; }
+  .event-form input[type="text"] { flex:1; min-width:180px; padding:8px; border:1px solid var(--border); border-radius:4px; font-size:14px; background:var(--input-bg); color:var(--text-base); }
+  .event-form input[type="time"] { padding:7px 8px; border:1px solid var(--border); border-radius:4px; font-size:13px; background:var(--input-bg); color:var(--text-base); }
+  .event-form .time-label { font-size:12px; color:var(--text-secondary); }
+  .event-form button { background:#27ae60; color:#fff; border:none; padding:8px 16px; border-radius:4px; cursor:pointer; }
+  .event-form button:hover { background:#1e8449; }
+  .event-time, .event-range { display:inline-block; font-size:11px; padding:1px 6px; border-radius:3px; margin-right:4px; }
+  .event-time { background:var(--time-badge-bg); color:var(--time-badge-text); }
+  .event-range { background:var(--range-badge-bg); color:var(--range-badge-text); }
+  .event-list { list-style:none; }
+  .event-list li { background:var(--item-bg); padding:10px; margin-bottom:6px; border-radius:4px; display:flex; justify-content:space-between; align-items:center; border-left:4px solid #f39c12; flex-wrap:wrap; gap:6px; }
+  .event-content { display:flex; align-items:center; gap:8px; flex:1; flex-wrap:wrap; }
+  .event-user { font-size:12px; font-weight:bold; color:#fff; padding:2px 8px; border-radius:10px; white-space:nowrap; }
+  .event-text { font-size:14px; color:var(--text-base); }
+  .delete-btn { background:#e74c3c; color:#fff; border:none; padding:4px 10px; border-radius:3px; cursor:pointer; font-size:12px; }
+  .delete-btn:hover { background:#c0392b; }
+  .empty-msg { color:var(--empty-msg); font-size:14px; padding:8px; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+
+<!-- ===== 로그인 화면 ===== -->
+<div class="login-box" id="loginBox">
+  <a class="back-link" href="index.html">← 홈으로</a>
+  <h1>👨‍👩‍👧‍👦 가족 캘린더</h1>
+  <p>이름 입력 → 스킨 · 색상 선택 후 로그인하세요</p>
+
+  <label for="nameInput">이름</label>
+  <input type="text" id="nameInput" placeholder="예: 아빠, 엄마, 재현" maxlength="20">
+
+  <label>스킨 선택</label>
+  <div class="skin-toggle">
+    <div class="skin-btn active" id="skinLight" data-skin="light">☀️ 라이트</div>
+    <div class="skin-btn"        id="skinDark"  data-skin="dark">🌙 다크</div>
+  </div>
+
+  <label>색상 선택 (36가지)</label>
+  <div class="color-palette" id="colorPalette"></div>
+  <div class="selected-color-info">
+    <span>선택한 색상:</span>
+    <div class="selected-color-swatch" id="selectedSwatch" style="background:#bdc3c7"></div>
+    <span id="selectedColorText">선택되지 않음</span>
+  </div>
+
+  <button class="login-btn" id="loginBtn" disabled>로그인</button>
+
+  <div class="saved-users">
+    <h3>👥 저장된 가족 (클릭하면 자동 입력)</h3>
+    <div class="saved-user-list" id="savedUserList"></div>
+  </div>
+</div>
+
+<!-- ===== 캘린더 화면 ===== -->
+<div class="container hidden" id="calendarBox">
+  <a class="back-link" href="index.html">← 홈으로</a>
+  <div class="top-bar">
+    <h1>👨‍👩‍👧‍👦 가족 캘린더</h1>
+    <div class="user-info">
+      <div class="user-dot" id="userDot"></div>
+      <span id="userName"></span>
+      <button class="skin-switch-btn" id="skinSwitchBtn"></button>
+      <button class="logout-btn" id="logoutBtn">로그아웃</button>
+    </div>
+  </div>
+
+  <div class="top-bar">
+    <div></div>
+    <div class="nav">
+      <button id="prevBtn">◀ 이전</button>
+      <span class="month-label" id="monthLabel"></span>
+      <button id="nextBtn">다음 ▶</button>
+      <button id="todayBtn">오늘</button>
+    </div>
+  </div>
+
+  <div class="help-msg">
+    💡 날짜를 <b>클릭</b>하면 단일 일정, <b>드래그</b>하면 기간 일정을 등록합니다.
+  </div>
+
+  <div class="weekdays">
+    <div class="sun">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div class="sat">토</div>
+  </div>
+  <div class="days" id="daysGrid"></div>
+
+  <div class="event-panel">
+    <h2 id="selectedDateLabel">날짜를 선택하세요</h2>
+    <div class="range-info" id="rangeInfo"></div>
+    <div class="event-form">
+      <input type="text" id="eventInput" placeholder="일정 내용을 입력하세요" disabled>
+      <span class="time-label">시작</span>
+      <input type="time" id="eventFrom" disabled>
+      <span class="time-label">~ 종료</span>
+      <input type="time" id="eventTo" disabled>
+      <button id="addBtn" disabled>추가</button>
+    </div>
+    <ul class="event-list" id="eventList"></ul>
+  </div>
+</div>
+
+<script>
+  // ===== 이 파일 전용 설정값 =====
+  // 다른 캘린더와 데이터가 섞이지 않도록 고유한 키 prefix 사용
+  const KEY_EVENTS  = 'family_events';
+  const KEY_USERS   = 'family_users';
+  const KEY_CURRENT = 'family_current_user';
+
+  // ===== 36색 팔레트 (6x6) =====
+  const COLOR_PALETTE = [
+    '#fadbd8','#f5b7b1','#f1948a','#ec7063','#e74c3c','#c0392b',
+    '#fdebd0','#fad7a0','#f8c471','#f5b041','#f39c12','#d68910',
+    '#fcf3cf','#f9e79f','#f7dc6f','#f4d03f','#f1c40f','#b7950b',
+    '#d4efdf','#a9dfbf','#7dcea0','#52be80','#27ae60','#1e8449',
+    '#d6eaf8','#aed6f1','#85c1e9','#5dade2','#3498db','#2874a6',
+    '#e8daef','#d2b4de','#bb8fce','#a569bd','#8e44ad','#6c3483'
+  ];
+
+  // ===== 상태 =====
+  let currentDate      = new Date();
+  let selectedColor    = null;
+  let selectedSkin     = 'light';
+  let currentUser      = null;
+  let currentUserColor = null;
+  let currentUserSkin  = 'light';
+  let selectedStart    = null;
+  let selectedEnd      = null;
+  let isDragging       = false;
+  let dragStart        = null;
+  let dragEnd          = null;
+
+  // ===== 스킨 =====
+  function applySkin(skin) {
+    document.body.classList.toggle('dark', skin === 'dark');
+  }
+
+  // ===== 스토리지 =====
+  function saveEvents(events) { localStorage.setItem(KEY_EVENTS, JSON.stringify(events)); }
+  function loadEvents() {
+    const raw = localStorage.getItem(KEY_EVENTS);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      // 이전 버전 객체 형식 자동 변환
+      const migrated = [];
+      Object.keys(parsed).forEach(dateStr => {
+        (parsed[dateStr]||[]).forEach(ev => {
+          migrated.push({ id:makeId(), user:ev.user||'?', color:ev.color||'#95a5a6',
+            text:ev.text||'', startDate:dateStr, endDate:dateStr, from:ev.from||'', to:ev.to||'' });
+        });
+      });
+      saveEvents(migrated);
+      return migrated;
+    }
+    return parsed;
+  }
+
+  function loadUsers() {
+    const raw = localStorage.getItem(KEY_USERS);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    const result = {};
+    Object.keys(parsed).forEach(name => {
+      const v = parsed[name];
+      result[name] = (typeof v === 'string') ? { color:v, skin:'light' } : v;
+    });
+    return result;
+  }
+  function saveUsers(users) { localStorage.setItem(KEY_USERS, JSON.stringify(users)); }
+
+  function makeId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+  function formatDate(y,m,d) { return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
+  function formatTimeRange(f,t) { return (f&&t)?`${f}~${t}`:f?`${f}~`:t?`~${t}`:''; }
+  function minDate(a,b) { return a<b?a:b; }
+  function maxDate(a,b) { return a>b?a:b; }
+  function dateInRange(d,s,e) { const lo=minDate(s,e),hi=maxDate(s,e); return d>=lo&&d<=hi; }
+  function rangesOverlap(as,ae,bs,be) { return as<=be&&bs<=ae; }
+  function daysBetween(a,b) { return Math.round((new Date(b)-new Date(a))/86400000); }
+
+  // ===== 로그인 화면 =====
+  function renderColorPalette() {
+    const el = document.getElementById('colorPalette');
+    el.innerHTML = '';
+    COLOR_PALETTE.forEach(color => {
+      const cell = document.createElement('div');
+      cell.className = 'color-cell';
+      cell.style.background = color;
+      cell.dataset.color = color;
+      cell.addEventListener('click', () => pickColor(color));
+      el.appendChild(cell);
+    });
+  }
+
+  function pickColor(color) {
+    selectedColor = color;
+    document.querySelectorAll('.color-cell').forEach(c => c.classList.toggle('active', c.dataset.color===color));
+    document.getElementById('selectedSwatch').style.background = color;
+    document.getElementById('selectedColorText').textContent = color;
+    checkLoginReady();
+  }
+
+  document.getElementById('skinLight').addEventListener('click', () => setLoginSkin('light'));
+  document.getElementById('skinDark').addEventListener('click',  () => setLoginSkin('dark'));
+  function setLoginSkin(skin) {
+    selectedSkin = skin;
+    document.getElementById('skinLight').classList.toggle('active', skin==='light');
+    document.getElementById('skinDark').classList.toggle('active',  skin==='dark');
+    applySkin(skin);
+  }
+
+  function checkLoginReady() {
+    const name = document.getElementById('nameInput').value.trim();
+    document.getElementById('loginBtn').disabled = !(name && selectedColor);
+  }
+
+  function renderSavedUsers() {
+    const users = loadUsers();
+    const list  = document.getElementById('savedUserList');
+    list.innerHTML = '';
+    const names = Object.keys(users);
+    if (!names.length) {
+      list.innerHTML = '<span style="color:var(--empty-msg);font-size:12px;">저장된 사용자가 없습니다</span>';
+      return;
+    }
+    names.forEach(name => {
+      const u    = users[name];
+      const chip = document.createElement('div');
+      chip.className = 'saved-user-chip';
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      dot.style.background = u.color;
+      const label = document.createElement('span');
+      label.textContent = name;
+      const icon = document.createElement('span');
+      icon.className = 'skin-icon';
+      icon.textContent = u.skin==='dark' ? '🌙' : '☀️';
+      chip.appendChild(dot); chip.appendChild(label); chip.appendChild(icon);
+      chip.addEventListener('click', () => {
+        document.getElementById('nameInput').value = name;
+        pickColor(u.color);
+        setLoginSkin(u.skin||'light');
+      });
+      list.appendChild(chip);
+    });
+  }
+
+  function login() {
+    const name = document.getElementById('nameInput').value.trim();
+    if (!name || !selectedColor) return;
+    const users = loadUsers();
+    const prevColor = users[name]?.color;
+    users[name] = { color:selectedColor, skin:selectedSkin };
+    saveUsers(users);
+    // 색상이 바뀌었으면 기존 일정 색상 일괄 갱신
+    if (prevColor && prevColor !== selectedColor) {
+      const events = loadEvents();
+      let changed = false;
+      events.forEach(ev => { if (ev.user===name) { ev.color=selectedColor; changed=true; } });
+      if (changed) saveEvents(events);
+    }
+    localStorage.setItem(KEY_CURRENT, name);
+    currentUser = name; currentUserColor = selectedColor; currentUserSkin = selectedSkin;
+    showCalendar();
+  }
+
+  function logout() {
+    localStorage.removeItem(KEY_CURRENT);
+    currentUser = currentUserColor = null;
+    currentUserSkin = 'light'; selectedStart = selectedEnd = null;
+    selectedColor = null; selectedSkin = 'light';
+    document.getElementById('nameInput').value = '';
+    document.querySelectorAll('.color-cell').forEach(c => c.classList.remove('active'));
+    document.getElementById('selectedSwatch').style.background = '#bdc3c7';
+    document.getElementById('selectedColorText').textContent = '선택되지 않음';
+    document.getElementById('loginBtn').disabled = true;
+    setLoginSkin('light');
+    document.getElementById('loginBox').classList.remove('hidden');
+    document.getElementById('calendarBox').classList.add('hidden');
+    renderSavedUsers();
+  }
+
+  // ===== 캘린더 화면 =====
+  function showCalendar() {
+    applySkin(currentUserSkin);
+    document.getElementById('loginBox').classList.add('hidden');
+    document.getElementById('calendarBox').classList.remove('hidden');
+    document.getElementById('userName').textContent = currentUser;
+    document.getElementById('userDot').style.background = currentUserColor;
+    updateSkinSwitchBtn();
+    renderCalendar();
+    renderEventList();
+  }
+
+  function updateSkinSwitchBtn() {
+    const btn = document.getElementById('skinSwitchBtn');
+    btn.textContent = currentUserSkin==='dark' ? '☀️ 라이트' : '🌙 다크';
+  }
+
+  document.getElementById('skinSwitchBtn').addEventListener('click', () => {
+    currentUserSkin = currentUserSkin==='dark' ? 'light' : 'dark';
+    applySkin(currentUserSkin);
+    updateSkinSwitchBtn();
+    const users = loadUsers();
+    if (users[currentUser]) { users[currentUser].skin = currentUserSkin; saveUsers(users); }
+  });
+
+  function renderCalendar() {
+    const year=currentDate.getFullYear(), month=currentDate.getMonth();
+    document.getElementById('monthLabel').textContent = `${year}년 ${month+1}월`;
+    const firstDay=new Date(year,month,1).getDay(), lastDate=new Date(year,month+1,0).getDate();
+    const today=new Date(), todayStr=formatDate(today.getFullYear(),today.getMonth(),today.getDate());
+    const events=loadEvents(), grid=document.getElementById('daysGrid');
+    grid.innerHTML='';
+    for (let i=0;i<firstDay;i++) { const e=document.createElement('div'); e.className='day empty'; grid.appendChild(e); }
+    const dragLo=(isDragging&&dragStart&&dragEnd)?minDate(dragStart,dragEnd):null;
+    const dragHi=(isDragging&&dragStart&&dragEnd)?maxDate(dragStart,dragEnd):null;
+    for (let day=1;day<=lastDate;day++) {
+      const cell=document.createElement('div'); cell.className='day';
+      const dateStr=formatDate(year,month,day); cell.dataset.date=dateStr;
+      const wd=new Date(year,month,day).getDay();
+      if (wd===0) cell.classList.add('sun');
+      if (wd===6) cell.classList.add('sat');
+      if (dateStr===todayStr) cell.classList.add('today');
+      if (isDragging&&dragLo) {
+        if (dateStr===dragLo||dateStr===dragHi) cell.classList.add('range-edge');
+        else if (dateStr>dragLo&&dateStr<dragHi) cell.classList.add('range');
+      } else if (selectedStart&&selectedEnd) {
+        const lo=minDate(selectedStart,selectedEnd), hi=maxDate(selectedStart,selectedEnd);
+        if (selectedStart===selectedEnd&&dateStr===selectedStart) cell.classList.add('selected');
+        else if (dateStr===lo||dateStr===hi) cell.classList.add('range-edge');
+        else if (dateStr>lo&&dateStr<hi) cell.classList.add('range');
+      }
+      const num=document.createElement('div'); num.className='date-num'; num.textContent=day; cell.appendChild(num);
+      const dayEvs=events.filter(ev=>dateInRange(dateStr,ev.startDate,ev.endDate));
+      dayEvs.slice(0,2).forEach(ev=>{
+        const dot=document.createElement('div'); dot.className='event-dot';
+        dot.style.background=ev.color||'#95a5a6';
+        const ts=formatTimeRange(ev.from,ev.to), multi=ev.startDate!==ev.endDate?'↔ ':'';
+        dot.textContent=`${multi}${ev.user}: ${ts?ts+' ':''}${ev.text}`;
+        cell.appendChild(dot);
+      });
+      if (dayEvs.length>2) {
+        const more=document.createElement('div'); more.className='event-dot';
+        more.style.background='#95a5a6'; more.textContent=`+${dayEvs.length-2}`; cell.appendChild(more);
+      }
+      cell.addEventListener('mousedown', e=>{e.preventDefault();isDragging=true;dragStart=dateStr;dragEnd=dateStr;renderCalendar();});
+      cell.addEventListener('mouseenter', ()=>{if(!isDragging)return;dragEnd=dateStr;renderCalendar();});
+      grid.appendChild(cell);
+    }
+  }
+
+  document.addEventListener('mouseup', ()=>{
+    if (!isDragging) return;
+    isDragging=false;
+    if (dragStart&&dragEnd) {
+      selectedStart=minDate(dragStart,dragEnd); selectedEnd=maxDate(dragStart,dragEnd);
+      activateInputs(); updateSelectedLabel();
+    }
+    dragStart=dragEnd=null; renderCalendar(); renderEventList();
+  });
+
+  function activateInputs() {
+    ['eventInput','eventFrom','eventTo'].forEach(id=>document.getElementById(id).disabled=false);
+    document.getElementById('addBtn').disabled=false;
+  }
+
+  function updateSelectedLabel() {
+    const label=document.getElementById('selectedDateLabel'), info=document.getElementById('rangeInfo');
+    if (!selectedStart) { label.textContent='날짜를 선택하세요'; info.textContent=''; return; }
+    if (selectedStart===selectedEnd) { label.textContent=`${selectedStart} 일정`; info.textContent='단일 날짜 선택됨'; }
+    else { label.textContent=`${selectedStart} ~ ${selectedEnd} 기간 일정`; info.textContent=`총 ${daysBetween(selectedStart,selectedEnd)+1}일 기간 선택됨`; }
+  }
+
+  function renderEventList() {
+    const list=document.getElementById('eventList'); list.innerHTML='';
+    if (!selectedStart) return;
+    const events=loadEvents();
+    const matched=events
+      .filter(ev=>rangesOverlap(ev.startDate,ev.endDate,selectedStart,selectedEnd))
+      .sort((a,b)=>{ if(a.startDate!==b.startDate) return a.startDate.localeCompare(b.startDate); return (a.from||'99:99').localeCompare(b.from||'99:99'); });
+    if (!matched.length) {
+      const msg=document.createElement('li'); msg.className='empty-msg'; msg.textContent='등록된 일정이 없습니다.'; list.appendChild(msg); return;
+    }
+    matched.forEach(ev=>{
+      const li=document.createElement('li'); li.style.borderLeftColor=ev.color||'#95a5a6';
+      const content=document.createElement('div'); content.className='event-content';
+      const badge=document.createElement('span'); badge.className='event-user'; badge.style.background=ev.color||'#95a5a6'; badge.textContent=ev.user; content.appendChild(badge);
+      if (ev.startDate!==ev.endDate) {
+        const rb=document.createElement('span'); rb.className='event-range'; rb.textContent=`📅 ${ev.startDate} ~ ${ev.endDate}`; content.appendChild(rb);
+      }
+      const ts=formatTimeRange(ev.from,ev.to);
+      if (ts) { const tb=document.createElement('span'); tb.className='event-time'; tb.textContent=`⏰ ${ts}`; content.appendChild(tb); }
+      const tx=document.createElement('span'); tx.className='event-text'; tx.textContent=ev.text; content.appendChild(tx);
+      const btn=document.createElement('button'); btn.className='delete-btn'; btn.textContent='삭제';
+      btn.addEventListener('click',()=>deleteEvent(ev.id));
+      li.appendChild(content); li.appendChild(btn); list.appendChild(li);
+    });
+  }
+
+  function addEvent() {
+    const input=document.getElementById('eventInput'), text=input.value.trim();
+    if (!text||!selectedStart||!selectedEnd) return;
+    const from=document.getElementById('eventFrom').value, to=document.getElementById('eventTo').value;
+    if (selectedStart===selectedEnd&&from&&to&&to<from) { alert('종료 시간이 시작 시간보다 빠를 수 없습니다.'); return; }
+    const events=loadEvents();
+    events.push({id:makeId(),user:currentUser,color:currentUserColor,text,startDate:selectedStart,endDate:selectedEnd,from,to});
+    saveEvents(events);
+    input.value=''; document.getElementById('eventFrom').value=''; document.getElementById('eventTo').value='';
+    renderCalendar(); renderEventList();
+  }
+
+  function deleteEvent(id) {
+    const events=loadEvents(), target=events.find(ev=>ev.id===id);
+    if (!target) return;
+    const who=target.user!==currentUser?`[${target.user}]님이 등록한 `:'';
+    if (!confirm(`${who}"${target.text}" 일정을 삭제하시겠습니까?`)) return;
+    saveEvents(events.filter(ev=>ev.id!==id));
+    renderCalendar(); renderEventList();
+  }
+
+  // ===== 이벤트 바인딩 =====
+  document.getElementById('nameInput').addEventListener('input', checkLoginReady);
+  document.getElementById('loginBtn').addEventListener('click', login);
+  document.getElementById('nameInput').addEventListener('keypress', e=>{ if(e.key==='Enter'&&!document.getElementById('loginBtn').disabled) login(); });
+  document.getElementById('logoutBtn').addEventListener('click', logout);
+  document.getElementById('prevBtn').addEventListener('click', ()=>{ currentDate.setMonth(currentDate.getMonth()-1); renderCalendar(); });
+  document.getElementById('nextBtn').addEventListener('click', ()=>{ currentDate.setMonth(currentDate.getMonth()+1); renderCalendar(); });
+  document.getElementById('todayBtn').addEventListener('click', ()=>{ currentDate=new Date(); renderCalendar(); });
+  document.getElementById('addBtn').addEventListener('click', addEvent);
+  ['eventInput','eventFrom','eventTo'].forEach(id=>document.getElementById(id).addEventListener('keypress',e=>{ if(e.key==='Enter') addEvent(); }));
+
+  // ===== 초기화 =====
+  renderColorPalette();
+  renderSavedUsers();
+  const savedName=localStorage.getItem(KEY_CURRENT);
+  if (savedName) {
+    const u=loadUsers()[savedName];
+    if (u) { currentUser=savedName; currentUserColor=u.color; currentUserSkin=u.skin||'light'; selectedColor=u.color; selectedSkin=u.skin||'light'; showCalendar(); }
+  }
+</script>
+</body>
+</html>
