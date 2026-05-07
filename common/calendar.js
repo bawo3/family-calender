@@ -437,9 +437,11 @@
   // 외부(시스템 설정/안드로이드 알림 트레이)에서 권한이 변경된 경우 상태 동기화
   function syncNotifyPermission(){
     if(!('Notification' in window)) return;
+    // 켜져있었는데 외부에서 거부된 경우 → 버튼 업데이트 후 안내 팝업
     if(Notification.permission==='denied' && isNotifyOn()){
       localStorage.setItem(KEY_NOTIFY_ON,'0');
       updateAlarmBtn();
+      showNotifyPermModal(true); // 거부 안내 모달 표시
     }
   }
 
