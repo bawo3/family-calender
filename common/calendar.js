@@ -86,16 +86,16 @@
         <button class="u-btn logout-u-btn" id="logoutBtn">로그아웃</button>
       </div>
     </div>
-    <div class="cal-nav-row">
-      <button class="nav-btn" id="prevBtn">◀</button>
-      <span class="month-label" id="monthLabel"></span>
-      <button class="nav-btn" id="nextBtn">▶</button>
-      <button class="nav-btn" id="todayBtn">오늘</button>
-    </div>
   </div>
   <div id="importantBanner" class="important-banner hidden">
     <div class="b-title">⭐ 중요 일정</div>
     <div id="importantBannerList"></div>
+  </div>
+  <div class="cal-nav-row">
+    <button class="nav-btn" id="prevBtn">◀</button>
+    <span class="month-label" id="monthLabel"></span>
+    <button class="nav-btn" id="nextBtn">▶</button>
+    <button class="nav-btn" id="todayBtn">오늘</button>
   </div>
   <div class="weekdays">
     <div class="sun">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div class="sat">토</div>
