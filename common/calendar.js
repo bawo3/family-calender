@@ -465,12 +465,18 @@
     });
   }
 
+  // 캘린더별 삭제 금지 사용자 화이트리스트 (이력 없어도 보존)
+  const PROTECTED_USERS = {
+    family: ['김주영','강민선','김정현','김재현']
+  };
   // 일정 이력이 없는 사용자를 서버/캐시에서 삭제 (로그인 화면 진입 시 정리)
   async function pruneInactiveUsers(){
     const users = loadAllUsers();
     const events = loadEvents();
     const activeNames = new Set(events.map(e => e.user));
-    const namesToDelete = Object.keys(users).filter(n => !activeNames.has(n));
+    const protectedSet = new Set(PROTECTED_USERS[PREFIX] || []);
+    const namesToDelete = Object.keys(users)
+      .filter(n => !activeNames.has(n) && !protectedSet.has(n));
     if(!namesToDelete.length) return;
     // 병렬 삭제 — 실패해도 다른 삭제는 진행
     await Promise.allSettled(namesToDelete.map(n => apiDeleteUser(n)));
