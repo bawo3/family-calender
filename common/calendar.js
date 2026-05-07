@@ -974,6 +974,12 @@
       const m=document.createElement('li');m.className='empty-msg';
       m.textContent='등록된 일정이 없습니다.';list.appendChild(m);return;
     }
+    // 날짜 + 요일 표기 헬퍼 (예: 2025-05-08 (목))
+    const WEEKDAYS=['일','월','화','수','목','금','토'];
+    const dateWithWeekday=(s)=>{
+      const [y,m,d]=s.split('-').map(Number);
+      return `${s} (${WEEKDAYS[new Date(y,m-1,d).getDay()]})`;
+    };
     matched.forEach(ev=>{
       const li=document.createElement('li');li.style.borderLeftColor=ev.color||'#95a5a6';
       const content=document.createElement('div');content.className='event-content';
@@ -983,10 +989,6 @@
       }
       const badge=document.createElement('span');badge.className='event-user';
       badge.style.background=ev.color||'#95a5a6';badge.textContent=ev.user;content.appendChild(badge);
-      if(ev.startDate!==ev.endDate){
-        const rb=document.createElement('span');rb.className='event-range';
-        rb.textContent=`📅 ${ev.startDate} ~ ${ev.endDate}`;content.appendChild(rb);
-      }
       const tx=document.createElement('span');tx.className='event-text';
       tx.textContent=ev.text;content.appendChild(tx);
       const ts=formatTimeRange(ev.from,ev.to);
@@ -994,6 +996,13 @@
         const tb=document.createElement('span');tb.className='event-time';
         tb.textContent=`⏰ ${ts}`;content.appendChild(tb);
       }
+      // 내용 아래 날짜(요일) 라인 — 단일/범위 모두 표시
+      const dateLine=document.createElement('div');
+      dateLine.className='event-date-line';
+      dateLine.textContent = ev.startDate===ev.endDate
+        ? `📅 ${dateWithWeekday(ev.startDate)}`
+        : `📅 ${dateWithWeekday(ev.startDate)} ~ ${dateWithWeekday(ev.endDate)}`;
+      content.appendChild(dateLine);
       const btnWrap=document.createElement('div');btnWrap.className='event-btn-wrap';
       if(ev.user===currentUser){
         const editBtn=document.createElement('button');editBtn.className='edit-btn';editBtn.textContent='수정';
