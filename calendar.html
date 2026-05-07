@@ -59,19 +59,22 @@
   .quick-login-label{font-size:11px;color:var(--text-secondary);width:100%;margin:4px 0 2px;}
   .quick-login-divider{width:100%;height:1px;background:var(--border);margin:6px 0 2px;}
 
-  .top-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;}
-  .top-bar h1{font-size:22px;color:var(--text-primary);}
-  .top-bar button{background:var(--accent);color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:14px;}
-  .top-bar button:hover{background:var(--accent-dark);}
-  .nav{display:flex;gap:8px;align-items:center;}
-  .nav .month-label{font-size:18px;font-weight:bold;min-width:130px;text-align:center;color:var(--text-primary);}
-  .user-info{display:flex;align-items:center;gap:8px;background:var(--panel-bg);padding:6px 12px;border-radius:20px;font-size:13px;border:1px solid var(--border);}
-  .user-info .user-dot{width:14px;height:14px;border-radius:50%;border:1px solid rgba(128,128,128,0.3);flex-shrink:0;}
-  .user-info .skin-switch-btn{background:var(--chip-bg);color:var(--text-base);border:1px solid var(--border);padding:3px 8px;border-radius:4px;cursor:pointer;font-size:12px;}
-  .user-info .skin-switch-btn:hover{background:var(--chip-hover);}
-  .user-info .logout-btn{background:#e74c3c;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px;}
-  .user-info .logout-btn:hover{background:#c0392b;}
-  .help-msg{font-size:12px;color:var(--text-secondary);margin-bottom:10px;padding:8px 10px;background:var(--panel-bg);border-radius:6px;border:1px solid var(--border);border-left:3px solid var(--help-border);}
+  /* 캘린더 헤더 (compact) */
+  .cal-header{margin-bottom:10px;}
+  .cal-title-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px;}
+  .cal-title{font-size:17px;font-weight:bold;color:var(--text-primary);}
+  .user-bar{display:flex;align-items:center;gap:5px;}
+  .u-dot{width:11px;height:11px;border-radius:50%;border:1px solid rgba(128,128,128,0.3);flex-shrink:0;}
+  .u-name{font-size:13px;color:var(--text-base);max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .u-btn{background:var(--chip-bg);color:var(--text-base);border:1px solid var(--border);padding:5px 9px;border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap;transition:background 0.15s;}
+  .u-btn:hover{background:var(--chip-hover);}
+  .logout-u-btn{background:#e74c3c;color:#fff;border-color:#e74c3c;}
+  .logout-u-btn:hover{background:#c0392b;border-color:#c0392b;}
+  .cal-nav-row{display:flex;align-items:center;gap:6px;}
+  .nav-btn{background:var(--accent);color:#fff;border:none;padding:7px 12px;border-radius:6px;cursor:pointer;font-size:14px;transition:background 0.15s;}
+  .nav-btn:hover{background:var(--accent-dark);}
+  .month-label{font-size:16px;font-weight:bold;flex:1;text-align:center;color:var(--text-primary);}
+  @media(max-width:480px){body{padding:10px;}.container{padding:14px;}}
 
   .important-banner{background:linear-gradient(135deg,#e74c3c,#c0392b);color:#fff;border-radius:8px;padding:10px 16px;margin-bottom:12px;}
   .important-banner .b-title{font-size:13px;font-weight:bold;margin-bottom:6px;}
@@ -175,25 +178,24 @@
 </div>
 
 <div class="container hidden" id="calendarBox">
-  <div class="top-bar">
-    <h1 id="calTitle">📅 캘린더</h1>
-    <div class="user-info">
-      <div class="user-dot" id="userDot"></div>
-      <span id="userName"></span>
-      <button class="skin-switch-btn" id="skinSwitchBtn"></button>
-      <button class="logout-btn" id="logoutBtn">로그아웃</button>
+  <div class="cal-header">
+    <div class="cal-title-row">
+      <h1 class="cal-title" id="calTitle">📅 캘린더</h1>
+      <div class="user-bar">
+        <div class="u-dot" id="userDot"></div>
+        <span class="u-name" id="userName"></span>
+        <button class="u-btn" id="skinSwitchBtn"></button>
+        <button class="u-btn" id="noticeBtn">📢</button>
+        <button class="u-btn logout-u-btn" id="logoutBtn">로그아웃</button>
+      </div>
     </div>
-  </div>
-  <div class="top-bar">
-    <button id="noticeBtn">📢 공지사항</button>
-    <div class="nav">
-      <button id="prevBtn">◀ 이전</button>
+    <div class="cal-nav-row">
+      <button class="nav-btn" id="prevBtn">◀</button>
       <span class="month-label" id="monthLabel"></span>
-      <button id="nextBtn">다음 ▶</button>
-      <button id="todayBtn">오늘</button>
+      <button class="nav-btn" id="nextBtn">▶</button>
+      <button class="nav-btn" id="todayBtn">오늘</button>
     </div>
   </div>
-  <div class="help-msg">💡 날짜를 <b>클릭</b>하면 단일 일정, <b>드래그</b>하면 기간 일정을 등록합니다.</div>
   <div id="importantBanner" class="important-banner hidden">
     <div class="b-title">⭐ 중요 일정</div>
     <div id="importantBannerList"></div>
@@ -406,7 +408,7 @@
     updateSkinSwitchBtn();renderCalendar();renderEventList();
   }
   function updateSkinSwitchBtn(){
-    document.getElementById('skinSwitchBtn').textContent=currentUserSkin==='dark'?'☀️ 라이트':'🌙 다크';
+    document.getElementById('skinSwitchBtn').textContent=currentUserSkin==='dark'?'☀️':'🌙';
   }
   document.getElementById('skinSwitchBtn').addEventListener('click',()=>{
     currentUserSkin=currentUserSkin==='dark'?'light':'dark';
