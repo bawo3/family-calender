@@ -479,7 +479,8 @@
         const more=document.createElement('div');more.className='event-bar bar-single';
         more.style.background='#95a5a6';more.textContent=`+${deduped.length-2}개 더`;cell.appendChild(more);
       }
-      cell.addEventListener('click',()=>{
+      cell.addEventListener('click',(e)=>{
+        e.stopPropagation(); // 외부 클릭 초기화 핸들러로 버블링 방지
         if(!isDragging){
           isDragging=true;dragStart=dateStr;dragEnd=dateStr;
           selectedStart=dateStr;selectedEnd=dateStr;
