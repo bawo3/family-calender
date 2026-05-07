@@ -388,6 +388,57 @@
     updateSkinSwitchBtn();renderCalendar();renderEventList();
     // 공지 있으면 자동 팝업 (첫 로딩 시만)
     if(autoNotice&&cache.notices.length>0) openNoticeModal();
+    // 오늘 중요 일정 브라우저 알림
+    if(autoNotice) requestAndNotify();
+  }
+
+  // -----------------------------------------
+  // 브라우저 알림 (중요 일정)
+  // -----------------------------------------
+  async function requestAndNotify(){
+    if(!('Notification' in window)) return; // 미지원 브라우저
+    let perm=Notification.permission;
+    if(perm==='default'){
+      perm=await Notification.requestPermission();
+    }
+    if(perm!=='granted') return;
+    sendTodayNotifications();
+  }
+
+  function sendTodayNotifications(){
+    const today=todayStr();
+    // 오늘 이미 알림 보낸 ID 목록 (하루 단위 중복 방지)
+    const lsKey=`${PREFIX}_notified_${today}`;
+    const sent=new Set(lsGet(lsKey,[]));
+
+    const todayImportant=cache.events.filter(ev=>
+      ev.important && dateInRange(today,ev.startDate,ev.endDate)
+    );
+    if(!todayImportant.length) return;
+
+    let newSent=false;
+    todayImportant.forEach(ev=>{
+      if(sent.has(ev.id)) return; // 이미 알림 보냄
+      const isStart=ev.startDate===today;
+      const isEnd=ev.endDate===today;
+      const dateLabel=ev.startDate===ev.endDate
+        ? ev.startDate
+        : `${ev.startDate} ~ ${ev.endDate}`;
+      const statusLabel=isStart&&isEnd?'오늘 하루'
+        :isStart?'오늘 시작'
+        :isEnd?'오늘 마감'
+        :'진행 중';
+      const ts=formatTimeRange(ev.from,ev.to);
+      const body=`${ev.user} · ${dateLabel} [${statusLabel}]${ts?' · '+ts:''}`;
+      new Notification(`⭐ ${ev.text}`,{
+        body,
+        icon:'https://cdn.jsdelivr.net/npm/twemoji@14/assets/72x72/2b50.png',
+        tag:`${PREFIX}_${ev.id}`, // 같은 tag는 중복 표시 안 됨
+      });
+      sent.add(ev.id);
+      newSent=true;
+    });
+    if(newSent) lsSet(lsKey,[...sent]);
   }
   function updateSkinSwitchBtn(){
     document.getElementById('skinSwitchBtn').textContent=currentUserSkin==='dark'?'☀️':'🌙';
