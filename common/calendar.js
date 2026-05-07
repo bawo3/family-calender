@@ -292,6 +292,14 @@
     cache.users[name] = { color, skin };
     cache.allUsers[name] = { color, skin, fromCurrent:true };
   }
+  async function apiDeleteUser(name){
+    if(localMode){
+      const users=lsGet(LS_USERS,{}); delete users[name]; lsSet(LS_USERS,users);
+      delete cache.users[name]; delete cache.allUsers[name]; return;
+    }
+    await fetchJSON(`${API}/users?prefix=${encodeURIComponent(PREFIX)}&name=${encodeURIComponent(name)}`,{method:'DELETE'});
+    delete cache.users[name]; delete cache.allUsers[name];
+  }
   async function apiAddNotice(n){
     if(localMode){
       const notices=lsGet(LS_NOTICES,[]); notices.unshift(n); lsSet(LS_NOTICES,notices);
@@ -432,7 +440,9 @@
     document.getElementById('loginBtn').disabled=!(document.getElementById('nameInput').value.trim()&&selectedColor);
   }
 
-  function renderSavedUsers(){
+  async function renderSavedUsers(){
+    // 캘린더에 이력(일정)이 없는 사용자 자동 삭제
+    await pruneInactiveUsers();
     const users = loadAllUsers();
     const section=document.getElementById('quickLoginSection');
     const list=document.getElementById('quickLoginList');
@@ -453,6 +463,17 @@
       });
       list.appendChild(chip);
     });
+  }
+
+  // 일정 이력이 없는 사용자를 서버/캐시에서 삭제 (로그인 화면 진입 시 정리)
+  async function pruneInactiveUsers(){
+    const users = loadAllUsers();
+    const events = loadEvents();
+    const activeNames = new Set(events.map(e => e.user));
+    const namesToDelete = Object.keys(users).filter(n => !activeNames.has(n));
+    if(!namesToDelete.length) return;
+    // 병렬 삭제 — 실패해도 다른 삭제는 진행
+    await Promise.allSettled(namesToDelete.map(n => apiDeleteUser(n)));
   }
 
   async function login(){
