@@ -710,7 +710,7 @@
     // 알림 OFF 상태면 동의/거부 모달 (공지 유무와 무관, 세션당 1회)
     if(autoNotice) await askNotifyIfOff();
     // 공지 있으면 토스트로 5초간 은은하게 안내 (자동 모달 X)
-    if(autoNotice && cache.notices.length>0) showNoticeToast(cache.notices.length);
+    if(autoNotice && cache.notices.length>0) showNoticeToast(cache.notices);
     // 이미 ON인 경우 SW 재등록 (브라우저 재시작 후 SW가 사라질 수 있음)
     if(autoNotice && isNotifyOn()) registerPushSubscription();
     // 오늘 중요 일정 브라우저 알림
@@ -1365,16 +1365,35 @@
 
   // 공지 토스트 — 5초 동안 은은하게 페이드 인/아웃, 클릭하면 모달 열림
   let noticeToastTimer=null;
-  function showNoticeToast(count){
+  function showNoticeToast(notices){
     const toast=document.getElementById('noticeToast');
     if(!toast) return;
-    toast.textContent = `📢 등록된 공지 ${count}건이 있습니다 (탭하여 보기)`;
+    const count=notices.length;
+    // 헤더 + 각 공지 미리보기 (최대 5건 표시, 본문 30자 truncate)
+    const PREVIEW_MAX=5, TEXT_MAX=30;
+    const truncate=t=>{ const s=String(t||'').replace(/\s+/g,' ').trim(); return s.length>TEXT_MAX ? s.slice(0,TEXT_MAX)+'…' : s; };
+    toast.innerHTML='';
+    const head=document.createElement('div');
+    head.className='notice-toast-head';
+    head.textContent=`📢 등록된 공지 ${count}건 (탭하여 보기)`;
+    toast.appendChild(head);
+    notices.slice(0, PREVIEW_MAX).forEach(n=>{
+      const line=document.createElement('div');
+      line.className='notice-toast-line';
+      line.textContent=`• ${truncate(n.text)}`;
+      toast.appendChild(line);
+    });
+    if(count>PREVIEW_MAX){
+      const more=document.createElement('div');
+      more.className='notice-toast-more';
+      more.textContent=`… 외 ${count-PREVIEW_MAX}건`;
+      toast.appendChild(more);
+    }
+
     if(noticeToastTimer){ clearTimeout(noticeToastTimer); noticeToastTimer=null; }
     toast.classList.remove('hidden');
-    // 강제 reflow → fade-in transition 적용
-    void toast.offsetWidth;
+    void toast.offsetWidth; // reflow → fade-in
     toast.classList.add('show');
-    // 한번만 클릭 시 즉시 모달 열기
     const onTap=()=>{
       toast.classList.remove('show');
       setTimeout(()=>toast.classList.add('hidden'),400);
@@ -1382,7 +1401,6 @@
       openNoticeModal();
     };
     toast.addEventListener('click', onTap, {once:true});
-    // 5초 후 자동 페이드 아웃
     noticeToastTimer=setTimeout(()=>{
       toast.classList.remove('show');
       setTimeout(()=>{ toast.classList.add('hidden'); toast.removeEventListener('click', onTap); }, 600);
