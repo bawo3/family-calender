@@ -141,7 +141,7 @@
   let currentDate=new Date(), selectedColor=null, selectedSkin='light';
   let currentUser=null, currentUserColor=null, currentUserSkin='light';
   let selectedStart=null, selectedEnd=null;
-  let isDragging=false, dragStart=null, dragEnd=null;
+  let tapFirst=null; // 1번째 탭 날짜 (null=미선택, string=2번째 탭 대기 중)
 
   // 메모리 캐시 — DB 호출 결과를 보관해서 렌더 함수는 동기적으로 동작
   const cache = { events:[], users:{}, allUsers:{}, notices:[] };
@@ -429,8 +429,7 @@
     const events=loadEvents(),grid=document.getElementById('daysGrid');
     grid.innerHTML='';
     for(let i=0;i<firstDay;i++){const e=document.createElement('div');e.className='day empty';grid.appendChild(e);}
-    const dragLo=(isDragging&&dragStart&&dragEnd)?minDate(dragStart,dragEnd):null;
-    const dragHi=(isDragging&&dragStart&&dragEnd)?maxDate(dragStart,dragEnd):null;
+    const dragLo=null, dragHi=null; // 호버 프리뷰 제거 (클릭 안정성 우선)
     for(let day=1;day<=lastDate;day++){
       const cell=document.createElement('div');cell.className='day';
       const dateStr=formatDate(year,month,day);cell.dataset.date=dateStr;
@@ -480,18 +479,19 @@
         more.style.background='#95a5a6';more.textContent=`+${deduped.length-2}개 더`;cell.appendChild(more);
       }
       cell.addEventListener('click',(e)=>{
-        e.stopPropagation(); // 외부 클릭 초기화 핸들러로 버블링 방지
-        if(!isDragging){
-          isDragging=true;dragStart=dateStr;dragEnd=dateStr;
+        e.stopPropagation();
+        if(tapFirst===null){
+          // 1번째 탭: 단일 날짜 선택
+          tapFirst=dateStr;
           selectedStart=dateStr;selectedEnd=dateStr;
           activateInputs();updateSelectedLabel();renderCalendar();renderEventList();
         }else{
-          isDragging=false;
-          selectedStart=minDate(dragStart,dateStr);selectedEnd=maxDate(dragStart,dateStr);
-          dragStart=dragEnd=null;activateInputs();updateSelectedLabel();renderCalendar();renderEventList();
+          // 2번째 탭: 범위 확정
+          selectedStart=minDate(tapFirst,dateStr);selectedEnd=maxDate(tapFirst,dateStr);
+          tapFirst=null;
+          activateInputs();updateSelectedLabel();renderCalendar();renderEventList();
         }
       });
-      cell.addEventListener('mouseenter',()=>{if(!isDragging)return;dragEnd=dateStr;renderCalendar();});
       grid.appendChild(cell);
     }
     renderImportantBanner();
@@ -577,7 +577,7 @@
       document.getElementById('eventFrom').value='0';
       document.getElementById('eventTo').value='0';
       document.getElementById('importantCheck').checked=false;
-      isDragging=false;dragStart=null;dragEnd=null;
+      tapFirst=null;
       renderCalendar();renderEventList();
     }catch(e){
       alert('일정 추가 실패: '+e.message);console.error(e);
@@ -707,11 +707,11 @@
   ['eventInput','eventFrom','eventTo'].forEach(id=>{
     document.getElementById(id).addEventListener('keypress',e=>{if(e.key==='Enter')addEvent();});
   });
-  // 외부 클릭 시 진행중 2탭 선택 초기화
+  // 외부 클릭 시 1번째 탭 선택 초기화
   document.addEventListener('click',e=>{
-    if(!isDragging)return;
+    if(tapFirst===null)return;
     if(e.target.closest('.day:not(.empty)'))return;
-    isDragging=false;dragStart=null;dragEnd=null;renderCalendar();
+    tapFirst=null;renderCalendar();
   });
   // 다른 탭/창에서 돌아왔을 때 자동 새로고침 (로컬 모드면 localStorage 재조회)
   document.addEventListener('visibilitychange',async()=>{
