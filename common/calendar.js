@@ -348,7 +348,7 @@
       }
       localStorage.setItem(KEY_CURRENT,name);
       currentUser=name;currentUserColor=selectedColor;currentUserSkin=selectedSkin;
-      showCalendar();
+      showCalendar(true); // 로그인 시 공지 자동 팝업
     }catch(e){
       alert(localMode?'로그인 실패: '+e.message:'로그인 실패: 서버 연결을 확인하세요.');
       console.error(e);
@@ -378,13 +378,15 @@
   // -----------------------------------------
   // 7) 캘린더 화면 / 렌더링
   // -----------------------------------------
-  function showCalendar(){
+  function showCalendar(autoNotice=false){
     applySkin(currentUserSkin);
     document.getElementById('loginBox').classList.add('hidden');
     document.getElementById('calendarBox').classList.remove('hidden');
     document.getElementById('userName').textContent=currentUser;
     document.getElementById('userDot').style.background=currentUserColor;
     updateSkinSwitchBtn();renderCalendar();renderEventList();
+    // 공지 있으면 자동 팝업 (첫 로딩 시만)
+    if(autoNotice&&cache.notices.length>0) openNoticeModal();
   }
   function updateSkinSwitchBtn(){
     document.getElementById('skinSwitchBtn').textContent=currentUserSkin==='dark'?'☀️':'🌙';
@@ -762,7 +764,7 @@
         currentUser=savedName;
         currentUserColor=u.color;currentUserSkin=u.skin||'light';
         selectedColor=u.color;selectedSkin=u.skin||'light';
-        showCalendar();
+        showCalendar(true); // 자동 로그인 시 공지 자동 팝업
       }
     }
   })();
