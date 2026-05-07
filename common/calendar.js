@@ -443,12 +443,15 @@
   async function syncNotifyPermission(){
     if(!('Notification' in window)) return;
     if(Notification.permission==='denied'){
-      const stored=localStorage.getItem(KEY_NOTIFY_ON);
-      // 명시적으로 끈 경우('0')가 아니면 → 거부 안내 모달 표시
-      if(stored!=='0'){
-        localStorage.setItem(KEY_NOTIFY_ON,'0');
-        updateAlarmBtn();
-        await showNotifyPermModal(true); // 모달 닫힐 때까지 대기
+      const wasEnabled=isNotifyOn(); // 켜져있다가 외부에서 거부된 경우
+      const sessionKey=`${PREFIX}_notifyDeniedShown`;
+      const shownThisSession=sessionStorage.getItem(sessionKey);
+      localStorage.setItem(KEY_NOTIFY_ON,'0');
+      updateAlarmBtn();
+      // 이번 세션에 아직 안 보여줬거나, 켜져있다가 꺼진 경우 → 모달 표시
+      if(wasEnabled||!shownThisSession){
+        sessionStorage.setItem(sessionKey,'1');
+        await showNotifyPermModal(true);
       }
     }
   }
