@@ -157,7 +157,7 @@
   <h1 id="loginTitle">📅 캘린더</h1>
   <p>이름 입력 → 스킨 · 색상 선택 후 로그인하세요</p>
   <div class="quick-login" id="quickLoginSection">
-    <h3>👤 사용자 선택 (클릭하면 자동 입력)</h3>
+    <h3>👤 사용자 선택 (탭하면 바로 로그인)</h3>
     <div class="quick-login-list" id="quickLoginList"></div>
   </div>
   <label for="nameInput">이름</label>
@@ -354,16 +354,9 @@
     if(!names.length){section.style.display='none';return;}
     section.style.display='';
     const sorted=[...names].sort((a,b)=>(users[b].fromCurrent?1:0)-(users[a].fromCurrent?1:0));
-    const hasCurrent=sorted.some(n=>users[n].fromCurrent);
-    let otherShown=false;
-    if(hasCurrent){const l=document.createElement('div');l.className='quick-login-label';l.textContent='이 캘린더';list.appendChild(l);}
     sorted.forEach(name=>{
       const u=users[name];
-      if(!u.fromCurrent&&!otherShown){
-        if(hasCurrent){const d=document.createElement('div');d.className='quick-login-divider';list.appendChild(d);}
-        const l=document.createElement('div');l.className='quick-login-label';l.textContent='다른 캘린더';list.appendChild(l);otherShown=true;
-      }
-      const chip=document.createElement('div');chip.className='saved-user-chip'+(u.fromCurrent?'':' other-cal');
+      const chip=document.createElement('div');chip.className='saved-user-chip';
       const dot=document.createElement('span');dot.className='dot';dot.style.background=u.color;
       const lbl=document.createElement('span');lbl.textContent=name;
       const icon=document.createElement('span');icon.className='skin-icon';icon.textContent=u.skin==='dark'?'🌙':'☀️';
