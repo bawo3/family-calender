@@ -146,6 +146,16 @@
   // 메모리 캐시 — DB 호출 결과를 보관해서 렌더 함수는 동기적으로 동작
   const cache = { events:[], users:{}, allUsers:{}, notices:[] };
 
+  // localStorage 폴백 모드 (API/KV 미연결 시 자동 전환)
+  let localMode = false;
+  const LS_EVENTS  = `${PREFIX}_ls_events`;
+  const LS_USERS   = `${PREFIX}_ls_users`;
+  const LS_NOTICES = `${PREFIX}_ls_notices`;
+  function lsGet(key, fallback){
+    try{ return JSON.parse(localStorage.getItem(key))??fallback; }catch{ return fallback; }
+  }
+  function lsSet(key, value){ localStorage.setItem(key, JSON.stringify(value)); }
+
   // -----------------------------------------
   // 4) API 헬퍼 + 캐시 동기화
   // -----------------------------------------
@@ -171,6 +181,14 @@
     cache.notices = await fetchJSON(`${API}/notices?prefix=${encodeURIComponent(PREFIX)}`);
   }
   async function refreshAll(){
+    if(localMode){
+      // 로컬 모드: localStorage에서 읽기
+      cache.events  = lsGet(LS_EVENTS,  []);
+      cache.users   = lsGet(LS_USERS,   {});
+      cache.allUsers = lsGet(LS_USERS,  {});
+      cache.notices = lsGet(LS_NOTICES, []);
+      return;
+    }
     // 병렬로 한 번에 가져와 초기 로딩 시간 단축
     await Promise.all([refreshEvents(), refreshUsers(), refreshAllUsers(), refreshNotices()]);
   }
@@ -183,16 +201,36 @@
 
   // API 쓰기 (비동기) — 캐시도 즉시 갱신해서 UI 반응 빠르게
   async function apiAddEvent(ev){
+    if(localMode){
+      const evs=lsGet(LS_EVENTS,[]); evs.push(ev); lsSet(LS_EVENTS,evs);
+      cache.events.push(ev); return;
+    }
     await fetchJSON(`${API}/events?prefix=${encodeURIComponent(PREFIX)}`,{
       method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(ev)
     });
     cache.events.push(ev);
   }
   async function apiDeleteEvent(id){
+    if(localMode){
+      const evs=lsGet(LS_EVENTS,[]).filter(e=>e.id!==id); lsSet(LS_EVENTS,evs);
+      cache.events=cache.events.filter(e=>e.id!==id); return;
+    }
     await fetchJSON(`${API}/events?prefix=${encodeURIComponent(PREFIX)}&id=${encodeURIComponent(id)}`,{method:'DELETE'});
     cache.events = cache.events.filter(e=>e.id!==id);
   }
   async function apiUpsertUser(name,color,skin){
+    if(localMode){
+      const users=lsGet(LS_USERS,{});
+      const oldColor=users[name]?.color;
+      users[name]={color,skin}; lsSet(LS_USERS,users);
+      // 색상 변경 시 일정 색도 로컬에서 동기화
+      if(oldColor&&oldColor!==color){
+        const evs=lsGet(LS_EVENTS,[]); let changed=false;
+        for(const e of evs){if(e.user===name){e.color=color;changed=true;}}
+        if(changed)lsSet(LS_EVENTS,evs);
+      }
+      cache.users[name]={color,skin}; cache.allUsers[name]={color,skin,fromCurrent:true}; return;
+    }
     await fetchJSON(`${API}/users?prefix=${encodeURIComponent(PREFIX)}`,{
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({name,color,skin})
@@ -201,12 +239,20 @@
     cache.allUsers[name] = { color, skin, fromCurrent:true };
   }
   async function apiAddNotice(n){
+    if(localMode){
+      const notices=lsGet(LS_NOTICES,[]); notices.unshift(n); lsSet(LS_NOTICES,notices);
+      cache.notices.unshift(n); return;
+    }
     await fetchJSON(`${API}/notices?prefix=${encodeURIComponent(PREFIX)}`,{
       method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(n)
     });
     cache.notices.unshift(n);
   }
   async function apiDeleteNotice(id){
+    if(localMode){
+      const notices=lsGet(LS_NOTICES,[]).filter(n=>n.id!==id); lsSet(LS_NOTICES,notices);
+      cache.notices=cache.notices.filter(n=>n.id!==id); return;
+    }
     await fetchJSON(`${API}/notices?prefix=${encodeURIComponent(PREFIX)}&id=${encodeURIComponent(id)}`,{method:'DELETE'});
     cache.notices = cache.notices.filter(n=>n.id!==id);
   }
@@ -296,15 +342,15 @@
     try{
       const prevColor = cache.users[name]?.color;
       await apiUpsertUser(name, selectedColor, selectedSkin);
-      // 색상이 바뀐 경우 서버에서 일정 색까지 자동 동기화 → 클라이언트 캐시도 갱신
-      if(prevColor && prevColor!==selectedColor){
+      // 색상이 바뀐 경우 서버/로컬에서 일정 색까지 자동 동기화 → 캐시 갱신
+      if(!localMode && prevColor && prevColor!==selectedColor){
         await refreshEvents();
       }
       localStorage.setItem(KEY_CURRENT,name);
       currentUser=name;currentUserColor=selectedColor;currentUserSkin=selectedSkin;
       showCalendar();
     }catch(e){
-      alert('로그인 실패: 서버 연결을 확인하세요.');
+      alert(localMode?'로그인 실패: '+e.message:'로그인 실패: 서버 연결을 확인하세요.');
       console.error(e);
       document.getElementById('loginBtn').disabled=false;
     }
@@ -614,7 +660,8 @@
       if(currentUser){renderCalendar();renderEventList();}
       else{renderSavedUsers();}
     }catch(e){
-      alert('새로고침 실패: '+e.message);console.error(e);
+      if(!localMode) alert('새로고침 실패: '+e.message);
+      console.error(e);
     }finally{
       btn.disabled=false;btn.textContent='🔄';
     }
@@ -665,7 +712,7 @@
     if(e.target.closest('.day:not(.empty)'))return;
     isDragging=false;dragStart=null;dragEnd=null;renderCalendar();
   });
-  // 다른 탭/창에서 돌아왔을 때 자동 새로고침 (다른 사용자 변경사항 반영)
+  // 다른 탭/창에서 돌아왔을 때 자동 새로고침 (로컬 모드면 localStorage 재조회)
   document.addEventListener('visibilitychange',async()=>{
     if(document.hidden)return;
     try{
@@ -688,13 +735,24 @@
     try{
       await refreshAll();
     }catch(e){
-      console.error('초기 데이터 로드 실패:', e);
-      overlay.innerHTML='⚠️ 서버 연결 실패<br><span style="font-size:12px">API가 배포되지 않았거나 KV가 설정되지 않았을 수 있습니다.</span>';
-      overlay.style.flexDirection='column';
-      // 그래도 로그인 화면은 보여줌 (DB 비어있는 상태로 진행)
+      console.error('초기 데이터 로드 실패 → localStorage 폴백:', e);
+      // API 실패 시 localStorage 폴백 모드 전환
+      localMode=true;
+      cache.events  = lsGet(LS_EVENTS,  []);
+      cache.users   = lsGet(LS_USERS,   {});
+      cache.allUsers = lsGet(LS_USERS,  {});
+      cache.notices = lsGet(LS_NOTICES, []);
     }
     overlay.classList.add('hidden');
     document.getElementById('loginBox').classList.remove('hidden');
+    // 로컬 모드 배너 표시
+    if(localMode){
+      const banner=document.createElement('div');
+      banner.className='local-mode-banner';
+      banner.id='localModeBanner';
+      banner.innerHTML='⚠️ 서버 미연결 — 이 기기에만 저장됩니다. Vercel KV 연결 후 재배포하면 공유 가능합니다.';
+      document.getElementById('calendarBox').querySelector('.cal-header').after(banner);
+    }
     renderSavedUsers();
     // 자동 로그인 (이 디바이스에 저장된 KEY_CURRENT 가 캐시에 있을 때)
     const savedName=localStorage.getItem(KEY_CURRENT);

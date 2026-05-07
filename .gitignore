@@ -1,21 +1,6 @@
-# Node.js
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# 환경 변수 (Vercel KV 등)
 .env
-.env.local
-.env*.local
-
-# Vercel
-.vercel
-
-# 에디터
-.vscode/
-.idea/
-
-# OS
+node_modules/
+.bkit/
+.vercel/
+dist/
 .DS_Store
-Thumbs.db
