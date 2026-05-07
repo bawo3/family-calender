@@ -965,31 +965,60 @@
       const s=String(v);
       return parseInt(s.includes(':')?s.split(':')[0]:s,10);
     };
-    const matched=events.filter(ev=>rangesOverlap(ev.startDate,ev.endDate,selectedStart,selectedEnd))
-      .sort((a,b)=>{
-        if(a.startDate!==b.startDate)return a.startDate.localeCompare(b.startDate);
-        return hourOf(a.from)-hourOf(b.from);
-      });
-    if(!matched.length){
-      const m=document.createElement('li');m.className='empty-msg';
-      m.textContent='등록된 일정이 없습니다.';list.appendChild(m);return;
-    }
     // 날짜 + 요일 표기 헬퍼 (예: 2025-05-08 (목))
     const WEEKDAYS=['일','월','화','수','목','금','토'];
     const dateWithWeekday=(s)=>{
       const [y,m,d]=s.split('-').map(Number);
       return `${s} (${WEEKDAYS[new Date(y,m-1,d).getDay()]})`;
     };
-    matched.forEach(ev=>{
-      const li=document.createElement('li');li.style.borderLeftColor=ev.color||'#95a5a6';
+    // 사용자 일정 매칭
+    const matched=events.filter(ev=>rangesOverlap(ev.startDate,ev.endDate,selectedStart,selectedEnd));
+    // 선택 기간 내 공휴일 수집 (가상 항목으로 리스트에 표시 — 삭제 불가)
+    const [sy,sm,sd]=selectedStart.split('-').map(Number);
+    const [ey,em,ed]=selectedEnd.split('-').map(Number);
+    const startD=new Date(sy,sm-1,sd), endD=new Date(ey,em-1,ed);
+    const holidayItems=[];
+    for(let cur=new Date(startD.getTime()); cur<=endD; cur.setDate(cur.getDate()+1)){
+      const ds=formatDate(cur.getFullYear(),cur.getMonth(),cur.getDate());
+      const name=getHoliday(ds);
+      if(name) holidayItems.push({isHoliday:true, startDate:ds, endDate:ds, text:name, from:0, to:0});
+    }
+    // 통합 정렬 — 날짜순, 같은 날이면 공휴일 먼저, 그 다음 시간순
+    const allItems=[...holidayItems, ...matched].sort((a,b)=>{
+      if(a.startDate!==b.startDate)return a.startDate.localeCompare(b.startDate);
+      if(!!a.isHoliday !== !!b.isHoliday) return a.isHoliday ? -1 : 1;
+      return hourOf(a.from)-hourOf(b.from);
+    });
+    if(!allItems.length){
+      const m=document.createElement('li');m.className='empty-msg';
+      m.textContent='등록된 일정이 없습니다.';list.appendChild(m);return;
+    }
+    allItems.forEach(ev=>{
+      const li=document.createElement('li');
       const content=document.createElement('div');content.className='event-content';
-      // 날짜(요일) 라인 — 항상 맨 위 (단일/범위 모두 표시)
+      // 날짜(요일) 라인 — 항상 맨 위
       const dateLine=document.createElement('div');
       dateLine.className='event-date-line';
       dateLine.textContent = ev.startDate===ev.endDate
         ? `📅 ${dateWithWeekday(ev.startDate)}`
         : `📅 ${dateWithWeekday(ev.startDate)} ~ ${dateWithWeekday(ev.endDate)}`;
       content.appendChild(dateLine);
+
+      if(ev.isHoliday){
+        // 공휴일 항목 — 빨간 테두리/뱃지, 수정·삭제 버튼 없음
+        li.style.borderLeftColor='#e74c3c';
+        li.classList.add('holiday-item');
+        const tag=document.createElement('span');tag.className='event-user';
+        tag.style.background='#e74c3c';tag.textContent='🇰🇷 공휴일';content.appendChild(tag);
+        const tx=document.createElement('span');tx.className='event-text';
+        tx.textContent=ev.text;tx.style.color='#e74c3c';tx.style.fontWeight='600';
+        content.appendChild(tx);
+        li.appendChild(content);list.appendChild(li);
+        return;
+      }
+
+      // 일반 일정
+      li.style.borderLeftColor=ev.color||'#95a5a6';
       if(ev.important){
         const imp=document.createElement('span');imp.className='event-important-badge';
         imp.textContent='⭐중요';content.appendChild(imp);

@@ -153,6 +153,9 @@ body.dark .b-item.in-progress{background:rgba(46,204,113,0.15);}
 .event-content{display:flex;align-items:center;gap:8px;flex:1;flex-wrap:wrap;}
 /* 일정 위에 표시되는 날짜(요일) 라벨 — 항상 첫 줄로 표시 */
 .event-date-line{flex-basis:100%;font-size:12px;color:var(--text-secondary);margin-bottom:2px;font-weight:600;}
+/* 공휴일 항목 — 옅은 빨강 배경 */
+.event-list li.holiday-item{background:rgba(231,76,60,0.08);}
+body.dark .event-list li.holiday-item{background:rgba(231,76,60,0.15);}
 .event-user{font-size:12px;font-weight:bold;color:#fff;padding:2px 8px;border-radius:10px;white-space:nowrap;}
 .event-text{font-size:14px;color:var(--text-base);}
 .event-important-badge{font-size:11px;background:#e74c3c;color:#fff;border-radius:3px;padding:1px 5px;}
