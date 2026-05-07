@@ -827,7 +827,11 @@
       const d=new Date(t.getFullYear(),t.getMonth()+2,0);
       return formatDate(d.getFullYear(),d.getMonth(),d.getDate());
     };
-    const oneWeekLater=addDays(today,7);
+    // 다음주 말일(일요일) 계산 — 월~일 한 주 기준
+    const t=new Date();
+    const dow=t.getDay(); // 0=일,1=월,...,6=토
+    const daysToNextWeekEnd=((7-dow)%7)+7; // 이번주 일요일까지 + 7일
+    const nextWeekEnd=addDays(today,daysToNextWeekEnd);
     const nextMonthEnd=lastDayOfNextMonth();
 
     // 중요 일정
@@ -841,9 +845,9 @@
     // 오늘 진행 중인 일반 일정 (중요 표시 없는 것만)
     const todayEvs=all.filter(ev=>!ev.important&&ev.startDate<=today&&ev.endDate>=today)
       .sort((a,b)=>a.endDate.localeCompare(b.endDate));
-    // 진행 예정 일반 — 1주일 이내 시작하는 것만 (1주일 전부터 노출)
+    // 진행 예정 일반 — 다음주 말일(일요일)까지 시작하는 것만
     const upcomingNormalEvs=all
-      .filter(ev=>!ev.important && ev.startDate>today && ev.startDate<=oneWeekLater)
+      .filter(ev=>!ev.important && ev.startDate>today && ev.startDate<=nextWeekEnd)
       .sort((a,b)=>a.startDate.localeCompare(b.startDate));
 
     if(!importantAll.length&&!todayEvs.length&&!upcomingNormalEvs.length){
@@ -874,7 +878,7 @@
     addSection('📍 현재 일정 진행중', inProgressEvs, true);
     addSection('📅 진행 예정 주요 일정', upcomingImportantEvs, false);
     addSection('🗓️ 오늘 진행 일정', todayEvs, true);
-    addSection('✨ 곧 시작 일정 (1주일 이내)', upcomingNormalEvs, false);
+    addSection('✨ 곧 시작 일정 (~다음주 일요일)', upcomingNormalEvs, false);
   }
 
   function renderCalendar(){
