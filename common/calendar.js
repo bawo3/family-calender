@@ -407,9 +407,9 @@
       const text=document.createElement('span');text.textContent=ev.text;
       const range=document.createElement('span');range.className='b-range'+(isIP?' b-range-ip':'');
       range.textContent=ev.startDate===ev.endDate?ev.startDate:`${ev.startDate}~${ev.endDate}`;
-      item.appendChild(badge);item.appendChild(text);
+      item.appendChild(badge);item.appendChild(text);item.appendChild(range);
       if(ts){const tb=document.createElement('span');tb.className='b-time';tb.textContent=`⏰ ${ts}`;item.appendChild(tb);}
-      item.appendChild(range);return item;
+      return item;
     };
     if(inProgressEvs.length){
       const t=document.createElement('div');t.className='b-section-title';
