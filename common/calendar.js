@@ -578,7 +578,7 @@
             localStorage.setItem(phoneKey(name), phone);
             cleanup(phone);
           } else {
-            // 검증 모드 — DB와 비교
+            // 검증 모드 — DB와 비교 (시도 제한 적용)
             const r=await fetchJSON(`${API}/users?prefix=${encodeURIComponent(PREFIX)}&action=verify`,{
               method:'POST', headers:{'Content-Type':'application/json'},
               body: JSON.stringify({ name, phone })
@@ -586,8 +586,16 @@
             if(r && r.ok){
               localStorage.setItem(phoneKey(name), phone);
               cleanup(phone);
+            } else if(r && r.locked){
+              const m=Math.floor((r.remainSec||0)/60), s=(r.remainSec||0)%60;
+              errBox.textContent=`🔒 시도 한도 초과 — ${m}분 ${s}초 후 다시 시도하거나 관리자에게 문의하세요.`;
+              okBtn.disabled=true;
+              input.disabled=true;
             } else {
-              errBox.textContent='휴대폰 번호가 일치하지 않습니다.';
+              const left = (r && typeof r.attemptsLeft==='number') ? r.attemptsLeft : null;
+              errBox.textContent = left!=null
+                ? `휴대폰 번호 불일치 (남은 시도: ${left}회)`
+                : '휴대폰 번호가 일치하지 않습니다.';
               okBtn.disabled=false;
             }
           }

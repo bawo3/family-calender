@@ -719,6 +719,7 @@
         return;
       }
       listEl.innerHTML = '';
+      const now = Date.now();
       names.forEach(name => {
         const u = users[name];
         const row = document.createElement('div');
@@ -732,6 +733,21 @@
         nameEl.className = 'user-name';
         nameEl.textContent = name;
 
+        // 잠금/실패 상태 배지
+        const isLocked = u.lockedUntil && u.lockedUntil > now;
+        const failed = u.failedAttempts || 0;
+        let lockBadge = null;
+        if (isLocked || failed > 0) {
+          lockBadge = document.createElement('span');
+          lockBadge.style.cssText = 'font-size:11px;padding:2px 6px;border-radius:4px;background:' + (isLocked ? '#e74c3c' : '#f39c12') + ';color:#fff;';
+          if (isLocked) {
+            const remainMin = Math.ceil((u.lockedUntil - now) / 60000);
+            lockBadge.textContent = `🔒 잠금 ${remainMin}분`;
+          } else {
+            lockBadge.textContent = `⚠️ 실패 ${failed}회`;
+          }
+        }
+
         // 휴대폰 입력 필드
         const phoneInput = document.createElement('input');
         phoneInput.type = 'tel';
@@ -741,10 +757,18 @@
         phoneInput.style.cssText = 'flex:1;min-width:120px;max-width:170px;padding:5px 8px;border:1px solid #d0d4d9;border-radius:5px;font-size:13px;';
 
         const phoneSave = document.createElement('button');
-        phoneSave.className = 'user-phone-save-btn';
         phoneSave.textContent = '저장';
         phoneSave.style.cssText = 'padding:5px 10px;font-size:12px;background:#27ae60;color:#fff;border:none;border-radius:5px;cursor:pointer;';
         phoneSave.addEventListener('click', () => savePhone(cal, name, phoneInput.value, phoneSave));
+
+        // 잠금 해제 버튼 (잠금/실패 있을 때만 노출)
+        let resetBtn = null;
+        if (isLocked || failed > 0) {
+          resetBtn = document.createElement('button');
+          resetBtn.textContent = '잠금해제';
+          resetBtn.style.cssText = 'padding:5px 10px;font-size:12px;background:#3498db;color:#fff;border:none;border-radius:5px;cursor:pointer;';
+          resetBtn.addEventListener('click', () => resetLock(cal, name));
+        }
 
         const delBtn = document.createElement('button');
         delBtn.className = 'user-del-btn';
@@ -753,8 +777,10 @@
 
         row.appendChild(dot);
         row.appendChild(nameEl);
+        if (lockBadge) row.appendChild(lockBadge);
         row.appendChild(phoneInput);
         row.appendChild(phoneSave);
+        if (resetBtn) row.appendChild(resetBtn);
         row.appendChild(delBtn);
         listEl.appendChild(row);
       });
@@ -834,6 +860,21 @@
       btn.disabled = false; btn.textContent = '추가';
     }
   });
+
+  // 잠금/실패 카운터 초기화 (관리자)
+  async function resetLock(cal, name) {
+    const prefix = calPrefix(cal);
+    try {
+      const res = await fetch(`${API}/users?prefix=${encodeURIComponent(prefix)}&action=reset-lock`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      if (!res.ok) throw new Error((await res.json()).error || '초기화 실패');
+      await renderUserList(cal); // 목록 다시 그려서 배지 사라지게
+    } catch (e) {
+      alert('초기화 실패: ' + e.message);
+    }
+  }
 
   // 사용자 휴대폰 번호 저장
   async function savePhone(cal, name, phoneRaw, btn) {

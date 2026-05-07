@@ -5,9 +5,11 @@
 //   GET  /api/users?prefix=xxx&reveal=1        → 관리자용: phone 평문 포함 ({name:{color,skin,phone}})
 //   POST /api/users?prefix=xxx                 → upsert (body: {name, color, skin, phone?})
 //   POST /api/users?prefix=xxx&action=verify   → 휴대폰 번호 검증 (body: {name, phone})
-//                                                반환 {ok:true} / {ok:false}
+//                                                반환 {ok:true} / {ok:false, locked, remainSec, attemptsLeft}
+//                                                틀리면 failedAttempts++; MAX 도달 시 lockedUntil 설정
 //   POST /api/users?prefix=xxx&action=set-phone → 관리자용: phone 단독 갱신 (body: {name, phone})
 //                                                  phone 빈 값이면 삭제
+//   POST /api/users?prefix=xxx&action=reset-lock → 관리자용: failedAttempts/lockedUntil 초기화 (body: {name})
 //   DELETE /api/users?prefix=xxx&name=xxx      → 사용자 삭제
 // =========================================
 import { isValidPrefix, getJson, setJson, getAllPrefixes, send, allowCors } from './_kv.js';
@@ -38,13 +40,63 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      // 휴대폰 번호 검증 — 다른 정보는 변경하지 않음
+      // 휴대폰 번호 검증 — 시도 횟수 추적 + 잠금 적용
       if (action === 'verify') {
+        const MAX_TRIES = 5;
+        const LOCK_MS = 30 * 60 * 1000; // 30분
         const { name, phone } = req.body || {};
         if (!name || !phone) return send(res, 400, { error: 'name and phone required' });
         const users = await getJson(prefix, 'users', {});
         if (!users[name]) return send(res, 404, { error: 'user not found' });
-        return send(res, 200, { ok: users[name].phone === phone });
+
+        const u = users[name];
+        const now = Date.now();
+        // 잠금 중이면 차단 (현재 시도조차 거부)
+        if (u.lockedUntil && u.lockedUntil > now) {
+          return send(res, 200, { ok: false, locked: true, remainSec: Math.ceil((u.lockedUntil - now) / 1000) });
+        }
+
+        if (u.phone === phone) {
+          // 성공 → 카운터/잠금 초기화
+          if (u.failedAttempts || u.lockedUntil) {
+            delete u.failedAttempts;
+            delete u.lockedUntil;
+            users[name] = u;
+            await setJson(prefix, 'users', users);
+          }
+          return send(res, 200, { ok: true });
+        }
+
+        // 실패 → 카운터++ , 임계치 도달 시 잠금
+        const failed = (u.failedAttempts || 0) + 1;
+        u.failedAttempts = failed;
+        let locked = false;
+        let remainSec = 0;
+        if (failed >= MAX_TRIES) {
+          u.lockedUntil = now + LOCK_MS;
+          locked = true;
+          remainSec = Math.ceil(LOCK_MS / 1000);
+        }
+        users[name] = u;
+        await setJson(prefix, 'users', users);
+        return send(res, 200, {
+          ok: false,
+          locked,
+          remainSec,
+          attemptsLeft: Math.max(0, MAX_TRIES - failed)
+        });
+      }
+
+      // 관리자용 잠금/실패 카운터 초기화
+      if (action === 'reset-lock') {
+        const { name } = req.body || {};
+        if (!name) return send(res, 400, { error: 'name required' });
+        const users = await getJson(prefix, 'users', {});
+        if (!users[name]) return send(res, 404, { error: 'user not found' });
+        delete users[name].failedAttempts;
+        delete users[name].lockedUntil;
+        await setJson(prefix, 'users', users);
+        return send(res, 200, { ok: true });
       }
 
       // 관리자용 휴대폰 단독 갱신 (color 등 다른 정보 보존)
