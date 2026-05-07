@@ -815,16 +815,40 @@
     const today=todayStr();
     const all=loadEvents();
 
-    // 중요 일정 (오늘 이후 종료)
+    // 날짜 계산 헬퍼
+    const addDays=(s,n)=>{
+      const [y,m,d]=s.split('-').map(Number);
+      const dt=new Date(y,m-1,d);dt.setDate(dt.getDate()+n);
+      return formatDate(dt.getFullYear(),dt.getMonth(),dt.getDate());
+    };
+    const lastDayOfNextMonth=()=>{
+      const t=new Date();
+      // 다다음달 0일 = 다음달 마지막날
+      const d=new Date(t.getFullYear(),t.getMonth()+2,0);
+      return formatDate(d.getFullYear(),d.getMonth(),d.getDate());
+    };
+    const oneWeekLater=addDays(today,7);
+    const nextMonthEnd=lastDayOfNextMonth();
+
+    // 중요 일정
     const importantAll=all.filter(ev=>ev.important&&ev.endDate>=today);
     const inProgressEvs=importantAll.filter(ev=>ev.startDate<=today).sort((a,b)=>a.endDate.localeCompare(b.endDate));
-    const upcomingEvs=importantAll.filter(ev=>ev.startDate>today).sort((a,b)=>a.startDate.localeCompare(b.startDate));
+    // 진행 예정 중요 — 다음달 말일까지 시작하는 것만
+    const upcomingImportantEvs=importantAll
+      .filter(ev=>ev.startDate>today && ev.startDate<=nextMonthEnd)
+      .sort((a,b)=>a.startDate.localeCompare(b.startDate));
 
     // 오늘 진행 중인 일반 일정 (중요 표시 없는 것만)
     const todayEvs=all.filter(ev=>!ev.important&&ev.startDate<=today&&ev.endDate>=today)
       .sort((a,b)=>a.endDate.localeCompare(b.endDate));
+    // 진행 예정 일반 — 1주일 이내 시작하는 것만 (1주일 전부터 노출)
+    const upcomingNormalEvs=all
+      .filter(ev=>!ev.important && ev.startDate>today && ev.startDate<=oneWeekLater)
+      .sort((a,b)=>a.startDate.localeCompare(b.startDate));
 
-    if(!importantAll.length&&!todayEvs.length){banner.classList.add('hidden');return;}
+    if(!importantAll.length&&!todayEvs.length&&!upcomingNormalEvs.length){
+      banner.classList.add('hidden');return;
+    }
     banner.classList.remove('hidden');list.innerHTML='';
 
     const makeItem=(ev,isIP)=>{
@@ -839,22 +863,18 @@
       if(ts){const tb=document.createElement('span');tb.className='b-time';tb.textContent=`⏰ ${ts}`;item.appendChild(tb);}
       return item;
     };
-    if(inProgressEvs.length){
-      const t=document.createElement('div');t.className='b-section-title';
-      t.textContent='📍 현재 일정 진행중';list.appendChild(t);
-      inProgressEvs.forEach(ev=>list.appendChild(makeItem(ev,true)));
-    }
-    if(upcomingEvs.length){
-      const t=document.createElement('div');t.className='b-section-title'+(inProgressEvs.length?' b-section-gap':'');
-      t.textContent='📅 진행 예정 주요 일정';list.appendChild(t);
-      upcomingEvs.forEach(ev=>list.appendChild(makeItem(ev,false)));
-    }
-    // 오늘 진행 중 일반 일정 (중요 일정 섹션 아래에 표시)
-    if(todayEvs.length){
-      const t=document.createElement('div');t.className='b-section-title'+(importantAll.length?' b-section-gap':'');
-      t.textContent='🗓️ 오늘 진행 일정';list.appendChild(t);
-      todayEvs.forEach(ev=>list.appendChild(makeItem(ev,true)));
-    }
+    let prevSection=false;
+    const addSection=(title,items,isIP)=>{
+      if(!items.length)return;
+      const t=document.createElement('div');t.className='b-section-title'+(prevSection?' b-section-gap':'');
+      t.textContent=title;list.appendChild(t);
+      items.forEach(ev=>list.appendChild(makeItem(ev,isIP)));
+      prevSection=true;
+    };
+    addSection('📍 현재 일정 진행중', inProgressEvs, true);
+    addSection('📅 진행 예정 주요 일정', upcomingImportantEvs, false);
+    addSection('🗓️ 오늘 진행 일정', todayEvs, true);
+    addSection('✨ 곧 시작 일정 (1주일 이내)', upcomingNormalEvs, false);
   }
 
   function renderCalendar(){
