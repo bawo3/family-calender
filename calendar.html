@@ -363,7 +363,7 @@
       const lbl=document.createElement('span');lbl.textContent=name;
       const icon=document.createElement('span');icon.className='skin-icon';icon.textContent=u.skin==='dark'?'🌙':'☀️';
       chip.appendChild(dot);chip.appendChild(lbl);chip.appendChild(icon);
-      chip.addEventListener('click',()=>{document.getElementById('nameInput').value=name;pickColor(u.color);setLoginSkin(u.skin||'light');});
+      chip.addEventListener('click',()=>{document.getElementById('nameInput').value=name;pickColor(u.color);setLoginSkin(u.skin||'light');login();});
       list.appendChild(chip);
     });
   }
