@@ -6,6 +6,7 @@
 //   DELETE /api/events?prefix=xxx&id=xxx    → 단건 삭제
 // =========================================
 import { isValidPrefix, getJson, setJson, send, allowCors } from './_kv.js';
+import { sendPushToPrefix } from './_push.js';
 
 export default async function handler(req, res) {
   if (allowCors(req, res)) return;
@@ -25,6 +26,17 @@ export default async function handler(req, res) {
       const events = await getJson(prefix, 'events', []);
       events.push(ev);
       await setJson(prefix, 'events', events);
+      // 등록된 모든 기기에 푸시 알림 전송 (실패해도 200 반환)
+      try {
+        const dateLabel = ev.startDate === ev.endDate
+          ? ev.startDate : `${ev.startDate} ~ ${ev.endDate}`;
+        const ts = ev.from ? ` · ${ev.from}${ev.to ? `~${ev.to}` : ''}` : '';
+        await sendPushToPrefix(prefix, {
+          title: `📅 새 일정: ${ev.text}`,
+          body: `${ev.user} · ${dateLabel}${ev.important ? ' ⭐중요' : ''}${ts}`,
+          tag: `ev_${ev.id}`
+        });
+      } catch(e) { console.error('push 전송 실패:', e); }
       return send(res, 200, { ok: true });
     }
 

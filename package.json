@@ -6,5 +6,8 @@
   "description": "Vercel KV 기반 공용 캘린더 (가족/연인/그룹용)",
   "engines": {
     "node": "20.x"
+  },
+  "dependencies": {
+    "web-push": "^3.6.7"
   }
 }

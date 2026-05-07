@@ -380,7 +380,7 @@
   // -----------------------------------------
   // 7) 캘린더 화면 / 렌더링
   // -----------------------------------------
-  function showCalendar(autoNotice=false){
+  async function showCalendar(autoNotice=false){
     applySkin(currentUserSkin);
     document.getElementById('loginBox').classList.add('hidden');
     document.getElementById('calendarBox').classList.remove('hidden');
@@ -389,6 +389,10 @@
     updateSkinSwitchBtn();renderCalendar();renderEventList();
     // 공지 있으면 자동 팝업 (첫 로딩 시만)
     if(autoNotice&&cache.notices.length>0) openNoticeModal();
+    // 최초 방문 시 알림 자동 활성화 시도 (KEY_NOTIFY_ON이 null인 경우만)
+    if(autoNotice) await autoEnableNotify();
+    // 이미 ON인 경우 SW 재등록 (브라우저 재시작 후 SW가 사라질 수 있음)
+    if(autoNotice && isNotifyOn()) registerPushSubscription();
     // 오늘 중요 일정 브라우저 알림
     if(autoNotice) checkNewItemsAndNotify();
     updateAlarmBtn();
@@ -417,10 +421,63 @@
     btn.style.opacity=on?'1':'0.5';
   }
 
+  // VAPID base64url → Uint8Array 변환 (Web Push 구독에 필요)
+  function urlBase64ToUint8Array(b64){
+    const pad='='.repeat((4-b64.length%4)%4);
+    const raw=atob((b64+pad).replace(/-/g,'+').replace(/_/g,'/'));
+    return Uint8Array.from(raw,c=>c.charCodeAt(0));
+  }
+
+  // 서비스 워커 등록 + 푸시 구독 → 서버에 저장
+  async function registerPushSubscription(){
+    if(!('serviceWorker' in navigator)||!('PushManager' in window)) return;
+    try {
+      // VAPID 공개키 가져오기
+      const vRes=await fetch('/api/vapid');
+      if(!vRes.ok) return; // 서버에 VAPID 미설정 시 스킵
+      const {publicKey}=await vRes.json();
+
+      const reg=await navigator.serviceWorker.register('/sw.js');
+      await navigator.serviceWorker.ready;
+
+      // 기존 구독 있으면 재사용, 없으면 새로 구독
+      let sub=await reg.pushManager.getSubscription();
+      if(!sub){
+        sub=await reg.pushManager.subscribe({
+          userVisibleOnly:true,
+          applicationServerKey:urlBase64ToUint8Array(publicKey)
+        });
+      }
+
+      // 구독 정보 + 현재 페이지 URL을 서버에 저장
+      const subData={...sub.toJSON(), pageUrl:location.href};
+      await fetch(`/api/tokens?prefix=${PREFIX}`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(subData)
+      });
+    } catch(e){ console.error('푸시 구독 실패:', e); }
+  }
+
   async function toggleNotify(){
     if(!('Notification' in window)){ alert('이 브라우저는 알림을 지원하지 않습니다.'); return; }
     if(isNotifyOn()){
-      localStorage.removeItem(KEY_NOTIFY_ON);
+      // 끄기 — '0' 명시 저장 + 푸시 구독 해제
+      localStorage.setItem(KEY_NOTIFY_ON,'0');
+      try {
+        if('serviceWorker' in navigator){
+          const reg=await navigator.serviceWorker.getRegistration('/sw.js');
+          const sub=await reg?.pushManager?.getSubscription();
+          if(sub){
+            await sub.unsubscribe();
+            await fetch(`/api/tokens?prefix=${PREFIX}`,{
+              method:'DELETE',
+              headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({endpoint:sub.endpoint})
+            });
+          }
+        }
+      } catch(e){ console.error('구독 해제 실패:', e); }
       updateAlarmBtn();
       alert('🔕 이 캘린더 알림이 꺼졌습니다.');
       return;
@@ -429,17 +486,40 @@
     let perm=Notification.permission;
     if(perm==='default') perm=await Notification.requestPermission();
     if(perm!=='granted'){
+      localStorage.setItem(KEY_NOTIFY_ON,'0');
       alert('브라우저에서 알림을 허용해주세요.\n주소창 왼쪽 🔒 아이콘 → 알림 → 허용');
       return;
     }
     localStorage.setItem(KEY_NOTIFY_ON,'1');
-    // 현재 등록된 항목은 모두 seen으로 처리 (켜는 시점 이전 내역은 알림 안 보냄)
+    // 켜는 시점 이전 내역은 seen 처리 (스팸 방지)
     const seen=getSeenIds();
     cache.events.forEach(ev=>seen.add(ev.id));
     cache.notices.forEach(n=>seen.add(n.id));
     saveSeenIds(seen);
+    await registerPushSubscription(); // 푸시 구독 등록
     updateAlarmBtn();
     alert('🔔 이 캘린더 알림이 켜졌습니다!\n새 일정·공지가 등록되면 알림이 옵니다.');
+  }
+
+  // 최초 방문 시(KEY_NOTIFY_ON=null) 자동으로 알림 켜기 시도
+  async function autoEnableNotify(){
+    if(!('Notification' in window)) return;
+    if(localStorage.getItem(KEY_NOTIFY_ON)!==null) return; // 이미 설정됨 → skip
+    // 첫 방문 — 권한 요청
+    let perm=Notification.permission;
+    if(perm==='default') perm=await Notification.requestPermission();
+    if(perm==='granted'){
+      localStorage.setItem(KEY_NOTIFY_ON,'1');
+      // 이미 등록된 내역은 모두 seen 처리 (스팸 방지)
+      const seen=getSeenIds();
+      cache.events.forEach(ev=>seen.add(ev.id));
+      cache.notices.forEach(n=>seen.add(n.id));
+      saveSeenIds(seen);
+      await registerPushSubscription(); // 푸시 구독 등록
+    } else {
+      localStorage.setItem(KEY_NOTIFY_ON,'0'); // 거부됨 → 다음 방문에 재요청 안 함
+    }
+    updateAlarmBtn();
   }
 
   function checkNewItemsAndNotify(){
