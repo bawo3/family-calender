@@ -14,6 +14,7 @@
   --help-border:#3498db; --time-badge-bg:#ecf0f1; --time-badge-text:#555555;
   --range-badge-bg:#fef9e7; --range-badge-text:#b9770e;
   --empty-msg:#999999; --skin-btn-border:#dddddd;
+  --today-bg:#fff9c4;
 }
 body.dark {
   --accent:#5588ff; --accent-dark:#3366cc;
@@ -25,6 +26,7 @@ body.dark {
   --help-border:#5588ff; --time-badge-bg:#2a2a4a; --time-badge-text:#aaaacc;
   --range-badge-bg:#2a240a; --range-badge-text:#f0c060;
   --empty-msg:#666688; --skin-btn-border:#2e2e4e;
+  --today-bg:rgba(255,235,100,0.12);
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;background:var(--body-bg);color:var(--text-base);padding:20px;user-select:none;transition:background 0.3s,color 0.3s;}
@@ -92,7 +94,7 @@ body{font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;background:var
 .day{min-height:100px;background:var(--day-bg);border-radius:6px;padding:6px;cursor:pointer;transition:background 0.15s;border:1px solid transparent;overflow:hidden;}
 .day:hover{background:var(--day-hover);}
 .day.empty{background:transparent;cursor:default;}
-.day.today{border-color:var(--accent);}
+.day.today{border-color:var(--accent);background:var(--today-bg);}
 .day.selected{background:var(--day-hover);border-color:var(--accent-dark);}
 .day.range{background:rgba(243,156,18,0.12);border-color:rgba(243,156,18,0.4);}
 .day.range-edge{background:rgba(243,156,18,0.28);border-color:#e67e22;}

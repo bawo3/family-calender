@@ -170,21 +170,22 @@
   function makeId(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
   function formatDate(y,m,d){ return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
   function todayStr(){ const t=new Date();return formatDate(t.getFullYear(),t.getMonth(),t.getDate()); }
-  // 시간 표기: 신규 "H" 시 정수 / 구버전 "HH:MM" 호환
+  // 시간 표기: 신규 "H" 시 정수 / 구버전 "HH:MM" 호환 / 종료시간 뒤에 "까지"
   function formatTimeRange(f,t){
     const fmt=v=>{
       if(v===''||v==null)return'';
       const s=String(v);
-      if(s.includes(':'))return parseInt(s.split(':')[0],10)+'시';
-      return parseInt(s,10)+'시';
+      const h=parseInt(s.includes(':')?s.split(':')[0]:s,10);
+      return String(h).padStart(2,'0')+'시';
     };
-    return(f&&t)?`${fmt(f)}~${fmt(t)}`:f?`${fmt(f)}~`:t?`~${fmt(t)}`:'';
+    return(f&&t)?`${fmt(f)}~${fmt(t)}까지`:f?`${fmt(f)}~`:t?`~${fmt(t)}까지`:'';
   }
-  // 0~23시 옵션 채우기
+  // 0~23시 옵션 채우기 — 시작은 "00시", 종료는 "00시까지" / 빈 옵션 없음 (기본 0시)
   function fillHourOptions(){
-    const opts='<option value="">시간</option>'+Array.from({length:24},(_,h)=>`<option value="${h}">${h}시</option>`).join('');
-    document.getElementById('eventFrom').innerHTML=opts;
-    document.getElementById('eventTo').innerHTML=opts;
+    const fromOpts=Array.from({length:24},(_,h)=>`<option value="${h}">${String(h).padStart(2,'0')}시</option>`).join('');
+    const toOpts  =Array.from({length:24},(_,h)=>`<option value="${h}">${String(h).padStart(2,'0')}시까지</option>`).join('');
+    document.getElementById('eventFrom').innerHTML=fromOpts;
+    document.getElementById('eventTo').innerHTML=toOpts;
   }
   function minDate(a,b){return a<b?a:b;} function maxDate(a,b){return a>b?a:b;}
   function dateInRange(d,s,e){const lo=minDate(s,e),hi=maxDate(s,e);return d>=lo&&d<=hi;}
@@ -290,8 +291,9 @@
     document.getElementById('selectedSwatch').style.background='#bdc3c7';
     document.getElementById('selectedColorText').textContent='선택되지 않음';
     document.getElementById('loginBtn').disabled=true;
-    // 입력폼 초기화
-    ['eventInput','eventFrom','eventTo'].forEach(id=>{const el=document.getElementById(id);el.disabled=true;el.value='';});
+    // 입력폼 초기화 (시간 select은 기본 0시로)
+    const evIn=document.getElementById('eventInput');evIn.disabled=true;evIn.value='';
+    ['eventFrom','eventTo'].forEach(id=>{const el=document.getElementById(id);el.disabled=true;el.value='0';});
     document.getElementById('importantCheck').checked=false;
     document.getElementById('importantCheck').disabled=true;
     document.getElementById('addBtn').disabled=true;
@@ -503,7 +505,9 @@
     const events=loadEvents();
     events.push({id:makeId(),user:currentUser,color:currentUserColor,text,startDate:selectedStart,endDate:selectedEnd,from,to,important});
     saveEvents(events);
-    input.value='';document.getElementById('eventFrom').value='';document.getElementById('eventTo').value='';
+    input.value='';
+    document.getElementById('eventFrom').value='0';
+    document.getElementById('eventTo').value='0';
     document.getElementById('importantCheck').checked=false;
     // 추가 후 선택 상태 리셋: 다음 탭은 새로운 1차 탭으로 동작
     isDragging=false;dragStart=null;dragEnd=null;
@@ -596,10 +600,22 @@
     document.getElementById(id).addEventListener('keypress',e=>{if(e.key==='Enter')addEvent();});
   });
 
+  // 날짜 셀 외부를 클릭하면 진행중인 2탭 선택을 초기화
+  // (그 다음 셀 클릭은 다시 1차 탭 = 당일 일정으로 동작)
+  document.addEventListener('click',e=>{
+    if(!isDragging)return;
+    if(e.target.closest('.day:not(.empty)'))return;
+    isDragging=false;dragStart=null;dragEnd=null;
+    renderCalendar();
+  });
+
   // -----------------------------------------
   // 11) 초기화
   // -----------------------------------------
   fillHourOptions();
+  // 시간 select 기본값 = 0시 (default 00시~00시까지)
+  document.getElementById('eventFrom').value='0';
+  document.getElementById('eventTo').value='0';
   renderColorPalette();
   renderSavedUsers();
   // 자동 로그인: 이전 로그인한 사용자 정보가 있으면 즉시 로그인 화면 통과
