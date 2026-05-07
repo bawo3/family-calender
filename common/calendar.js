@@ -1459,21 +1459,18 @@
     currentDate.setMonth(currentDate.getMonth()+1);renderCalendar();
   });
 
-  // 중요 일정 배너 — 헤더 클릭/탭으로 접기/펼치기 (localStorage 기억)
+  // 중요 일정 배너 — 헤더 클릭/탭으로 접기/펼치기 (페이지 로드 시 항상 열림)
   (function setupBannerCollapse(){
     const banner=document.getElementById('importantBanner');
     const title=document.getElementById('importantBannerTitle');
     if(!banner||!title) return;
-    const KEY = `${PREFIX}_banner_collapsed`;
-    if(localStorage.getItem(KEY)==='1') banner.classList.add('collapsed');
     let lastFire=0;
     const toggle=()=>{
       // 모바일에서 touchend → click 두번 발생 방지
       const now=Date.now();
       if(now-lastFire<400) return;
       lastFire=now;
-      const collapsed=banner.classList.toggle('collapsed');
-      localStorage.setItem(KEY, collapsed?'1':'0');
+      banner.classList.toggle('collapsed');
     };
     title.addEventListener('click',toggle);
     title.addEventListener('touchend',e=>{ e.preventDefault(); toggle(); }, {passive:false});
