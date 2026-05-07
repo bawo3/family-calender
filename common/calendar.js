@@ -393,6 +393,7 @@
   // 7) 캘린더 화면 / 렌더링
   // -----------------------------------------
   async function showCalendar(autoNotice=false){
+    syncNotifyPermission(); // 시스템에서 권한 변경된 경우 먼저 반영
     applySkin(currentUserSkin);
     document.getElementById('loginBox').classList.add('hidden');
     document.getElementById('calendarBox').classList.remove('hidden');
@@ -431,6 +432,15 @@
     btn.textContent=on?'🔔':'🔕';
     btn.title=on?'알림 ON — 클릭하여 끄기':'알림 OFF — 클릭하여 켜기';
     btn.style.opacity=on?'1':'0.5';
+  }
+
+  // 외부(시스템 설정/안드로이드 알림 트레이)에서 권한이 변경된 경우 상태 동기화
+  function syncNotifyPermission(){
+    if(!('Notification' in window)) return;
+    if(Notification.permission==='denied' && isNotifyOn()){
+      localStorage.setItem(KEY_NOTIFY_ON,'0');
+      updateAlarmBtn();
+    }
   }
 
   // 알림 권한 요청/안내 모달 (Promise<true=동의, false=거부>)
@@ -1011,6 +1021,7 @@
   // 다른 탭/창에서 돌아왔을 때 자동 새로고침 (로컬 모드면 localStorage 재조회)
   document.addEventListener('visibilitychange',async()=>{
     if(document.hidden)return;
+    syncNotifyPermission(); // 앱 복귀 시 권한 변경 여부 즉시 반영 (안드로이드 알림 거부 등)
     try{
       await refreshAll();
       if(currentUser){renderCalendar();renderEventList();checkNewItemsAndNotify();}
