@@ -88,7 +88,10 @@
     </div>
   </div>
   <div id="importantBanner" class="important-banner hidden">
-    <div class="b-title">⭐ 중요 일정</div>
+    <div class="b-title" id="importantBannerTitle">
+      <span>⭐ 중요 일정</span>
+      <span class="b-toggle" id="importantBannerToggle">▼</span>
+    </div>
     <div id="importantBannerList"></div>
   </div>
   <div class="cal-nav-row">
@@ -1455,6 +1458,19 @@
     e.stopPropagation();
     currentDate.setMonth(currentDate.getMonth()+1);renderCalendar();
   });
+
+  // 중요 일정 배너 — 헤더 클릭으로 접기/펼치기 (localStorage 기억)
+  (function setupBannerCollapse(){
+    const banner=document.getElementById('importantBanner');
+    const title=document.getElementById('importantBannerTitle');
+    if(!banner||!title) return;
+    const KEY = `${PREFIX}_banner_collapsed`;
+    if(localStorage.getItem(KEY)==='1') banner.classList.add('collapsed');
+    title.addEventListener('click',()=>{
+      const collapsed=banner.classList.toggle('collapsed');
+      localStorage.setItem(KEY, collapsed?'1':'0');
+    });
+  })();
 
   // 캘린더 좌우 스와이프 — 다음달/저번달 이동
   (function setupCalendarSwipe(){

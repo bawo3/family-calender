@@ -89,7 +89,11 @@ body{font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;background:var
 /* 매우중요 배너 */
 .important-banner{background:linear-gradient(135deg,rgba(231,76,60,0.12),rgba(192,57,43,0.08));border:1px solid rgba(231,76,60,0.25);color:var(--text-primary);border-radius:8px;padding:10px 16px;margin-bottom:12px;}
 body.dark .important-banner{background:linear-gradient(135deg,rgba(231,76,60,0.18),rgba(192,57,43,0.12));border-color:rgba(231,76,60,0.35);}
-.important-banner .b-title{font-size:13px;font-weight:bold;margin-bottom:6px;color:#e05040;}
+.important-banner .b-title{font-size:13px;font-weight:bold;margin-bottom:6px;color:#e05040;cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;gap:6px;}
+.important-banner .b-toggle{font-size:11px;transition:transform .2s;}
+.important-banner.collapsed .b-toggle{transform:rotate(-90deg);}
+.important-banner.collapsed .b-title{margin-bottom:0;}
+.important-banner.collapsed #importantBannerList{display:none;}
 body.dark .important-banner .b-title{color:#f07060;}
 .important-banner .b-item{font-size:12px;padding:4px 0;border-top:1px solid rgba(0,0,0,0.07);display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 body.dark .important-banner .b-item{border-top-color:rgba(255,255,255,0.08);}
