@@ -115,16 +115,6 @@
   </div>
 </div>
 
-<div class="modal-overlay hidden" id="notifyPermModal">
-  <div class="modal-box" style="max-width:340px;">
-    <h2 id="notifyPermTitle">🔔 알림 설정</h2>
-    <p id="notifyPermBody" style="font-size:14px;color:var(--text-base);line-height:1.7;margin-bottom:16px;white-space:pre-line;"></p>
-    <div class="modal-actions">
-      <button class="modal-btn cancel" id="notifyPermDenyBtn">거부</button>
-      <button class="modal-btn primary" id="notifyPermAllowBtn">동의</button>
-    </div>
-  </div>
-</div>
 
 <div class="modal-overlay hidden" id="noticeModal">
   <div class="modal-box">
@@ -448,57 +438,14 @@
       const shownThisSession=sessionStorage.getItem(sessionKey);
       localStorage.setItem(KEY_NOTIFY_ON,'0');
       updateAlarmBtn();
-      // 이번 세션에 아직 안 보여줬거나, 켜져있다가 꺼진 경우 → 동의/거부 모달 표시
+      // 이번 세션에 아직 안 보여줬거나, 켜져있다가 꺼진 경우 → 알림 버튼과 동일하게 처리
       if(wasEnabled||!shownThisSession){
         sessionStorage.setItem(sessionKey,'1');
-        const agreed=await showNotifyPermModal(false);
-        if(agreed){
-          // 동의 → 권한 재요청 시도
-          const newPerm=await Notification.requestPermission();
-          if(newPerm==='granted'){
-            localStorage.setItem(KEY_NOTIFY_ON,'1');
-            const seen=getSeenIds();
-            cache.events.forEach(ev=>seen.add(ev.id));
-            cache.notices.forEach(n=>seen.add(n.id));
-            saveSeenIds(seen);
-            await registerPushSubscription();
-          }
-          updateAlarmBtn();
-        }
+        await toggleNotify();
       }
     }
   }
 
-  // 알림 권한 요청/안내 모달 (Promise<true=동의, false=거부>)
-  function showNotifyPermModal(isDenied) {
-    return new Promise(resolve => {
-      const overlay  = document.getElementById('notifyPermModal');
-      const body     = document.getElementById('notifyPermBody');
-      const denyBtn  = document.getElementById('notifyPermDenyBtn');
-      const allowBtn = document.getElementById('notifyPermAllowBtn');
-
-      if (isDenied) {
-        body.textContent = '브라우저에서 알림이 차단되어 있습니다.\n주소창 왼쪽 🔒 아이콘 → 알림 → 허용으로\n변경 후 새로고침해주세요.';
-        allowBtn.style.display = 'none';
-        denyBtn.textContent = '확인';
-      } else {
-        body.textContent = '새 일정·공지가 등록되면\n알림을 받을 수 있습니다.\n브라우저 알림을 허용하시겠습니까?';
-        allowBtn.style.display = '';
-        denyBtn.textContent = '거부';
-      }
-
-      overlay.classList.remove('hidden');
-
-      const cleanup = result => {
-        overlay.classList.add('hidden');
-        allowBtn.style.display = '';
-        denyBtn.textContent = '거부';
-        resolve(result);
-      };
-      allowBtn.addEventListener('click', () => cleanup(true),  { once: true });
-      denyBtn.addEventListener ('click', () => cleanup(false), { once: true });
-    });
-  }
 
   // VAPID base64url → Uint8Array 변환 (Web Push 구독에 필요)
   function urlBase64ToUint8Array(b64){
@@ -563,14 +510,6 @@
     // 켜기
     if(!('Notification' in window)){ alert('이 브라우저는 알림을 지원하지 않습니다.'); return; }
     const perm=Notification.permission;
-    if(perm==='denied'){
-      await showNotifyPermModal(true); // 차단 안내
-      return;
-    }
-    if(perm==='default'){
-      const agreed=await showNotifyPermModal(false);
-      if(!agreed){ localStorage.setItem(KEY_NOTIFY_ON,'0'); updateAlarmBtn(); return; }
-    }
     const newPerm = perm==='granted' ? 'granted' : await Notification.requestPermission();
     if(newPerm!=='granted'){
       localStorage.setItem(KEY_NOTIFY_ON,'0'); updateAlarmBtn(); return;
@@ -591,8 +530,6 @@
     const perm=Notification.permission;
     if(perm==='denied') return; // syncNotifyPermission에서 이미 처리됨
     if(perm==='default'){
-      const agreed=await showNotifyPermModal(false);
-      if(!agreed){ localStorage.setItem(KEY_NOTIFY_ON,'0'); updateAlarmBtn(); return; }
       const newPerm=await Notification.requestPermission();
       if(newPerm!=='granted'){ localStorage.setItem(KEY_NOTIFY_ON,'0'); updateAlarmBtn(); return; }
     }
