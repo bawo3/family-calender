@@ -266,6 +266,7 @@
   function formatDate(y,m,d){ return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
   function todayStr(){ const t=new Date();return formatDate(t.getFullYear(),t.getMonth(),t.getDate()); }
   function formatTimeRange(f,t){
+    if(String(f)===String(t)) return ''; // 시작=종료 동일하면 시간 표시 안 함
     const fmt=v=>{
       if(v===''||v==null)return'';
       const s=String(v);
@@ -771,12 +772,11 @@
       cache.events=cache.events.map(e=>e.id===id?{...e,...updated}:e);
       return;
     }
-    // PUT으로 전체 배열 교체
-    const evs=cache.events.map(e=>e.id===id?{...e,...updated}:e);
-    await fetchJSON(`${API}/events?prefix=${encodeURIComponent(PREFIX)}`,{
-      method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(evs)
+    // PATCH로 단건 수정
+    await fetchJSON(`${API}/events?prefix=${encodeURIComponent(PREFIX)}&id=${encodeURIComponent(id)}`,{
+      method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(updated)
     });
-    cache.events=evs;
+    cache.events=cache.events.map(e=>e.id===id?{...e,...updated}:e);
   }
   async function addEvent(){
     const input=document.getElementById('eventInput'),text=input.value.trim();
