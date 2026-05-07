@@ -549,6 +549,12 @@
     // 켜기
     if(!('Notification' in window)){ alert('이 브라우저는 알림을 지원하지 않습니다.'); return; }
     const perm=Notification.permission;
+    // 이미 차단된 경우 — 브라우저가 requestPermission을 무시하므로 사용자 안내
+    if(perm==='denied'){
+      alert('브라우저에서 알림이 차단되어 있습니다.\n주소창의 🔒 아이콘 → 알림 → 허용으로 변경 후 다시 시도해주세요.');
+      localStorage.setItem(KEY_NOTIFY_ON,'0'); updateAlarmBtn();
+      return;
+    }
     const newPerm = perm==='granted' ? 'granted' : await Notification.requestPermission();
     if(newPerm!=='granted'){
       localStorage.setItem(KEY_NOTIFY_ON,'0'); updateAlarmBtn(); return;
