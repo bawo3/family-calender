@@ -275,12 +275,12 @@
   /* ===== 사용자 관리 모달 ===== */
   .user-list { margin-top: 4px; max-height: 320px; overflow-y: auto; }
   .user-row {
-    display: flex; align-items: center; gap: 10px;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
     padding: 8px 4px; border-bottom: 1px solid #1e2a4a;
   }
   .user-row:last-child { border-bottom: none; }
   .user-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
-  .user-name { flex: 1; font-size: 14px; color: #eee; }
+  .user-name { font-size: 14px; color: #eee; min-width: 60px; }
   .user-del-btn {
     background: rgba(255,80,80,0.15); border: 1px solid rgba(255,80,80,0.35);
     color: #ff8888; border-radius: 6px; padding: 3px 10px;
@@ -698,7 +698,8 @@
     const listEl = document.getElementById('userList');
     const countEl = document.getElementById('currentUserCount');
     try {
-      const res = await fetch(`${API}/users?prefix=${encodeURIComponent(prefix)}`);
+      // reveal=1 로 휴대폰 평문까지 가져옴 (관리자 모달 전용)
+      const res = await fetch(`${API}/users?prefix=${encodeURIComponent(prefix)}&reveal=1`);
       const users = await res.json();
       const names = Object.keys(users);
       countEl.textContent = `현재 ${names.length}명 등록됨`;
@@ -711,23 +712,63 @@
         const u = users[name];
         const row = document.createElement('div');
         row.className = 'user-row';
+
         const dot = document.createElement('div');
         dot.className = 'user-dot';
         dot.style.background = u.color || '#95a5a6';
+
         const nameEl = document.createElement('span');
         nameEl.className = 'user-name';
-        nameEl.textContent = name + (u.hasPhone ? ' 🔐' : '');
+        nameEl.textContent = name;
+
+        // 휴대폰 입력 필드
+        const phoneInput = document.createElement('input');
+        phoneInput.type = 'tel';
+        phoneInput.inputMode = 'numeric';
+        phoneInput.placeholder = '01012345678';
+        phoneInput.value = u.phone || '';
+        phoneInput.style.cssText = 'flex:1;min-width:120px;max-width:170px;padding:5px 8px;border:1px solid #d0d4d9;border-radius:5px;font-size:13px;';
+
+        const phoneSave = document.createElement('button');
+        phoneSave.className = 'user-phone-save-btn';
+        phoneSave.textContent = '저장';
+        phoneSave.style.cssText = 'padding:5px 10px;font-size:12px;background:#27ae60;color:#fff;border:none;border-radius:5px;cursor:pointer;';
+        phoneSave.addEventListener('click', () => savePhone(cal, name, phoneInput.value, phoneSave));
+
         const delBtn = document.createElement('button');
         delBtn.className = 'user-del-btn';
         delBtn.textContent = '삭제';
         delBtn.addEventListener('click', () => deleteUser(cal, name, row));
+
         row.appendChild(dot);
         row.appendChild(nameEl);
+        row.appendChild(phoneInput);
+        row.appendChild(phoneSave);
         row.appendChild(delBtn);
         listEl.appendChild(row);
       });
     } catch (e) {
       listEl.innerHTML = '<div class="user-empty">불러오기 실패: ' + e.message + '</div>';
+    }
+  }
+
+  // 사용자 휴대폰 번호 저장
+  async function savePhone(cal, name, phoneRaw, btn) {
+    const prefix = calPrefix(cal);
+    const phone = (phoneRaw || '').replace(/[^0-9]/g, '');
+    btn.disabled = true; const original = btn.textContent; btn.textContent = '...';
+    try {
+      const res = await fetch(`${API}/users?prefix=${encodeURIComponent(prefix)}&action=set-phone`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, phone })
+      });
+      if (!res.ok) throw new Error((await res.json()).error || '저장 실패');
+      btn.textContent = '✓';
+      setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 1000);
+    } catch (e) {
+      alert('저장 실패: ' + e.message);
+      btn.textContent = original; btn.disabled = false;
     }
   }
 

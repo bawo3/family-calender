@@ -2,9 +2,12 @@
 // 사용자(users) API
 //   GET  /api/users?prefix=xxx                 → {name: {color, skin, hasPhone}}  (phone 자체는 노출 X)
 //   GET  /api/users?prefix=xxx&all=1           → 위와 동일 + fromCurrent 표시
+//   GET  /api/users?prefix=xxx&reveal=1        → 관리자용: phone 평문 포함 ({name:{color,skin,phone}})
 //   POST /api/users?prefix=xxx                 → upsert (body: {name, color, skin, phone?})
 //   POST /api/users?prefix=xxx&action=verify   → 휴대폰 번호 검증 (body: {name, phone})
 //                                                반환 {ok:true} / {ok:false}
+//   POST /api/users?prefix=xxx&action=set-phone → 관리자용: phone 단독 갱신 (body: {name, phone})
+//                                                  phone 빈 값이면 삭제
 //   DELETE /api/users?prefix=xxx&name=xxx      → 사용자 삭제
 // =========================================
 import { isValidPrefix, getJson, setJson, getAllPrefixes, send, allowCors } from './_kv.js';
@@ -23,12 +26,14 @@ function sanitize(users, withFromCurrent=false) {
 export default async function handler(req, res) {
   if (allowCors(req, res)) return;
 
-  const { prefix, all, action } = req.query;
+  const { prefix, all, reveal, action } = req.query;
   if (!isValidPrefix(prefix)) return send(res, 400, { error: 'invalid prefix' });
 
   try {
     if (req.method === 'GET') {
       const users = await getJson(prefix, 'users', {});
+      // 관리자용 reveal 모드 — phone 평문 포함
+      if (reveal === '1') return send(res, 200, users);
       return send(res, 200, sanitize(users, all === '1'));
     }
 
@@ -40,6 +45,21 @@ export default async function handler(req, res) {
         const users = await getJson(prefix, 'users', {});
         if (!users[name]) return send(res, 404, { error: 'user not found' });
         return send(res, 200, { ok: users[name].phone === phone });
+      }
+
+      // 관리자용 휴대폰 단독 갱신 (color 등 다른 정보 보존)
+      if (action === 'set-phone') {
+        const { name, phone } = req.body || {};
+        if (!name) return send(res, 400, { error: 'name required' });
+        const users = await getJson(prefix, 'users', {});
+        if (!users[name]) return send(res, 404, { error: 'user not found' });
+        const cleaned = (phone || '').toString().replace(/[^0-9]/g, '');
+        const updated = { ...users[name] };
+        if (cleaned) updated.phone = cleaned;
+        else delete updated.phone;
+        users[name] = updated;
+        await setJson(prefix, 'users', users);
+        return send(res, 200, { ok: true });
       }
 
       // 일반 upsert
