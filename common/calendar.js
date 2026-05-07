@@ -834,20 +834,20 @@
     const nextWeekEnd=addDays(today,daysToNextWeekEnd);
     const nextMonthEnd=lastDayOfNextMonth();
 
-    // 중요 일정
-    const importantAll=all.filter(ev=>ev.important&&ev.endDate>=today);
-    const inProgressEvs=importantAll.filter(ev=>ev.startDate<=today).sort((a,b)=>a.endDate.localeCompare(b.endDate));
-    // 진행 예정 중요 — 다음달 말일까지 시작하는 것만
-    const upcomingImportantEvs=importantAll
-      .filter(ev=>ev.startDate>today && ev.startDate<=nextMonthEnd)
+    // 현재 진행 중인 모든 일정 (중요/일반 무관 — 오늘이 시작일~종료일에 포함)
+    const inProgressEvs=all
+      .filter(ev=>ev.startDate<=today && ev.endDate>=today)
+      .sort((a,b)=>a.endDate.localeCompare(b.endDate));
+    // 진행 예정 중요 — 다음달 말일까지 시작
+    const upcomingImportantEvs=all
+      .filter(ev=>ev.important && ev.startDate>today && ev.startDate<=nextMonthEnd)
       .sort((a,b)=>a.startDate.localeCompare(b.startDate));
-
-    // 진행 예정 일반 — 다음주 말일(일요일)까지 시작하는 것만
+    // 진행 예정 일반 — 다음주 말일(일요일)까지 시작
     const upcomingNormalEvs=all
       .filter(ev=>!ev.important && ev.startDate>today && ev.startDate<=nextWeekEnd)
       .sort((a,b)=>a.startDate.localeCompare(b.startDate));
 
-    if(!importantAll.length&&!upcomingNormalEvs.length){
+    if(!inProgressEvs.length && !upcomingImportantEvs.length && !upcomingNormalEvs.length){
       banner.classList.add('hidden');return;
     }
     banner.classList.remove('hidden');list.innerHTML='';
@@ -857,7 +857,8 @@
       const badge=document.createElement('span');badge.className='b-user-badge';
       badge.style.background=ev.color||'#95a5a6';badge.textContent=ev.user;
       const ts=formatTimeRange(ev.from,ev.to);
-      const text=document.createElement('span');text.textContent=ev.text;
+      const text=document.createElement('span');
+      text.textContent=(ev.important?'⭐ ':'')+ev.text;
       const range=document.createElement('span');range.className='b-range'+(isIP?' b-range-ip':'');
       range.textContent=ev.startDate===ev.endDate?ev.startDate:`${ev.startDate}~${ev.endDate}`;
       item.appendChild(badge);item.appendChild(text);item.appendChild(range);
