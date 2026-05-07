@@ -3,100 +3,588 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>캘린더 홈</title>
+<title>캘린더 관리자</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
-    background: #f0f2f5;
+    background: #1a1a2e;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    padding: 20px;
+    justify-content: flex-start;
+    padding: 30px 16px;
+    color: #eee;
   }
-  h1 {
-    font-size: 26px;
-    color: #2c3e50;
-    margin-bottom: 8px;
-    text-align: center;
-  }
-  .sub {
-    color: #7f8c8d;
-    font-size: 14px;
-    margin-bottom: 40px;
-    text-align: center;
-  }
-  .cards {
-    display: flex;
-    gap: 24px;
-    flex-wrap: wrap;
-    justify-content: center;
-  }
+
+  /* ===== 공통 카드 ===== */
   .card {
-    width: 240px;
-    background: #fff;
-    border-radius: 16px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-    padding: 32px 24px;
+    background: #16213e;
+    border-radius: 14px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+    padding: 32px;
+    width: 100%;
+    max-width: 420px;
+  }
+
+  /* ===== 패스워드 입력 화면 ===== */
+  #pwScreen h1 {
+    font-size: 22px;
     text-align: center;
+    margin-bottom: 6px;
+    color: #fff;
+  }
+  #pwScreen p {
+    text-align: center;
+    font-size: 13px;
+    color: #8888aa;
+    margin-bottom: 24px;
+  }
+  .field-label {
+    font-size: 13px;
+    font-weight: bold;
+    color: #aaaacc;
+    margin-bottom: 6px;
+    display: block;
+  }
+  .field-input {
+    width: 100%;
+    padding: 11px 14px;
+    background: #0f0f1a;
+    border: 1px solid #2e2e4e;
+    border-radius: 8px;
+    color: #eee;
+    font-size: 15px;
+    letter-spacing: 4px;
+    margin-bottom: 18px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .field-input:focus { border-color: #5588ff; }
+  .field-input.normal { letter-spacing: normal; }
+  .btn-primary {
+    width: 100%;
+    padding: 12px;
+    background: #5588ff;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: bold;
     cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: background 0.2s;
+  }
+  .btn-primary:hover { background: #3366cc; }
+  .btn-primary:disabled { background: #333; color: #666; cursor: not-allowed; }
+  .error-msg {
+    color: #ff6b6b;
+    font-size: 13px;
+    text-align: center;
+    margin-top: -10px;
+    margin-bottom: 12px;
+    min-height: 18px;
+  }
+
+  /* ===== 관리자 대시보드 ===== */
+  #dashboard { max-width: 860px; width: 100%; }
+  .dash-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .dash-header h1 { font-size: 24px; color: #fff; }
+  .dash-header-actions { display: flex; gap: 10px; }
+  .btn-ghost {
+    padding: 8px 16px;
+    background: transparent;
+    border: 1px solid #2e2e4e;
+    border-radius: 8px;
+    color: #aaaacc;
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .btn-ghost:hover { border-color: #5588ff; color: #5588ff; }
+  .btn-danger-ghost {
+    padding: 8px 16px;
+    background: transparent;
+    border: 1px solid #2e2e4e;
+    border-radius: 8px;
+    color: #ff8888;
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .btn-danger-ghost:hover { border-color: #ff4444; }
+
+  /* 캘린더 카드 그리드 */
+  .cal-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 18px;
+  }
+  .cal-card {
+    background: #16213e;
+    border-radius: 14px;
+    padding: 28px 20px;
+    text-align: center;
     text-decoration: none;
     color: inherit;
-    display: block;
-    border-top: 5px solid transparent;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    border-top: 5px solid #5588ff;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+    transition: transform 0.2s, box-shadow 0.2s;
+    position: relative;
+    cursor: pointer;
   }
-  .card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 28px rgba(0,0,0,0.14);
-  }
-  .card.family { border-top-color: #3498db; }
-  .card.hyeju  { border-top-color: #e84393; }
-  .card .emoji { font-size: 52px; margin-bottom: 16px; }
-  .card h2 { font-size: 18px; color: #2c3e50; margin-bottom: 8px; }
-  .card p  { font-size: 13px; color: #7f8c8d; line-height: 1.5; }
-  .card .go-btn {
-    display: inline-block;
-    margin-top: 20px;
-    padding: 8px 20px;
-    border-radius: 20px;
+  .cal-card:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
+  .cal-card .emoji { font-size: 48px; }
+  .cal-card .cal-name { font-size: 16px; font-weight: bold; color: #fff; }
+  .cal-card .cal-desc { font-size: 12px; color: #8888aa; }
+  .cal-card .open-btn {
+    margin-top: 8px;
+    padding: 6px 18px;
+    border-radius: 16px;
     font-size: 13px;
     font-weight: bold;
     color: #fff;
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
   }
-  .card.family .go-btn { background: #3498db; }
-  .card.hyeju  .go-btn { background: #e84393; }
-  footer {
-    margin-top: 40px;
-    font-size: 12px;
-    color: #bdc3c7;
+  /* 삭제 버튼 (카드 우측 상단) */
+  .cal-card .del-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(255,80,80,0.15);
+    border: 1px solid rgba(255,80,80,0.3);
+    color: #ff8888;
+    border-radius: 50%;
+    width: 26px;
+    height: 26px;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    transition: background 0.2s;
   }
+  .cal-card .del-btn:hover { background: rgba(255,80,80,0.3); }
+  /* 내장 캘린더(기본 2개)는 삭제 불가 표시 없음 */
+  .cal-card.builtin .del-btn { display: none; }
+
+  /* 캘린더 추가 카드 버튼 */
+  .add-cal-card {
+    background: #0f0f1a;
+    border-radius: 14px;
+    padding: 28px 20px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    border: 2px dashed #2e2e4e;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    min-height: 190px;
+  }
+  .add-cal-card:hover { border-color: #5588ff; background: #16213e; }
+  .add-cal-card .plus { font-size: 36px; color: #5588ff; }
+  .add-cal-card span { font-size: 14px; color: #8888aa; }
+
+  /* ===== 모달 공통 ===== */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 20px;
+  }
+  .modal {
+    background: #16213e;
+    border-radius: 14px;
+    padding: 30px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+  }
+  .modal h2 { font-size: 18px; color: #fff; margin-bottom: 20px; }
+  .modal-footer { display: flex; gap: 10px; margin-top: 20px; }
+  .btn-cancel {
+    flex: 1; padding: 10px;
+    background: #0f0f1a; border: 1px solid #2e2e4e;
+    border-radius: 8px; color: #aaa; font-size: 14px;
+    cursor: pointer;
+  }
+  .btn-cancel:hover { border-color: #5588ff; }
+  .btn-confirm {
+    flex: 2; padding: 10px;
+    background: #5588ff; border: none;
+    border-radius: 8px; color: #fff; font-size: 14px;
+    font-weight: bold; cursor: pointer;
+  }
+  .btn-confirm:hover { background: #3366cc; }
+  .btn-confirm:disabled { background: #333; color: #666; cursor: not-allowed; }
+
+  /* 색상 팔레트 (캘린더 추가 모달) */
+  .theme-palette {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+    margin-top: 6px;
+    margin-bottom: 4px;
+  }
+  .theme-swatch {
+    aspect-ratio: 1;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 3px solid transparent;
+    transition: transform 0.15s, border-color 0.15s;
+  }
+  .theme-swatch:hover { transform: scale(1.1); }
+  .theme-swatch.active { border-color: #fff; transform: scale(1.1); }
+
+  /* 이모지 입력 */
+  .emoji-input {
+    width: 72px;
+    font-size: 28px;
+    text-align: center;
+    padding: 6px;
+    background: #0f0f1a;
+    border: 1px solid #2e2e4e;
+    border-radius: 8px;
+    color: #fff;
+    outline: none;
+  }
+  .emoji-input:focus { border-color: #5588ff; }
+
+  /* ===== 반응형 ===== */
+  @media (max-width: 480px) {
+    body { padding: 16px; }
+    .card { padding: 24px 18px; }
+    .dash-header h1 { font-size: 20px; }
+    .modal { padding: 22px 16px; }
+  }
+
+  .hidden { display: none !important; }
 </style>
 </head>
 <body>
 
-<h1>📅 캘린더 일정표</h1>
-<p class="sub">사용할 캘린더를 선택하세요</p>
-
-<div class="cards">
-  <a class="card family" href="kim-family.html">
-    <div class="emoji">👨‍👩‍👧‍👦</div>
-    <h2>가족 캘린더</h2>
-    <p>김씨 가족 공용 일정 관리</p>
-    <span class="go-btn">열기 →</span>
-  </a>
-
-  <a class="card hyeju" href="jhkim-hyeju.html">
-    <div class="emoji">💑</div>
-    <h2>재현혜주네</h2>
-    <p>재현 &amp; 혜주 일정 관리</p>
-    <span class="go-btn">열기 →</span>
-  </a>
+<!-- ===== 패스워드 입력 화면 ===== -->
+<div class="card" id="pwScreen">
+  <h1>🔐 캘린더 관리자</h1>
+  <p>관리자 패스워드를 입력하세요</p>
+  <label class="field-label" for="pwInput">패스워드</label>
+  <input class="field-input" type="password" id="pwInput" placeholder="••••••" maxlength="30" autocomplete="off">
+  <div class="error-msg" id="pwError"></div>
+  <button class="btn-primary" id="pwLoginBtn">로그인</button>
 </div>
 
-<footer>데이터는 각 캘린더별로 브라우저 로컬스토리지에 따로 저장됩니다</footer>
+<!-- ===== 관리자 대시보드 ===== -->
+<div id="dashboard" class="hidden">
+  <div class="dash-header">
+    <h1>📅 캘린더 관리자</h1>
+    <div class="dash-header-actions">
+      <button class="btn-ghost" id="changePwBtn">🔑 패스워드 변경</button>
+      <button class="btn-danger-ghost" id="logoutBtn">로그아웃</button>
+    </div>
+  </div>
+  <div class="cal-grid" id="calGrid"></div>
+</div>
 
+<!-- ===== 모달: 캘린더 추가 ===== -->
+<div class="modal-overlay hidden" id="addModal">
+  <div class="modal">
+    <h2>📅 캘린더 추가</h2>
+
+    <label class="field-label">캘린더 이름</label>
+    <input class="field-input normal" type="text" id="newCalName" placeholder="예: 친구들" maxlength="20">
+
+    <label class="field-label">이모지</label>
+    <input class="emoji-input" type="text" id="newCalEmoji" value="📅" maxlength="2">
+
+    <label class="field-label" style="margin-top:14px;">테마 색상</label>
+    <div class="theme-palette" id="themePalette"></div>
+
+    <div class="modal-footer">
+      <button class="btn-cancel" id="addModalCancel">취소</button>
+      <button class="btn-confirm" id="addModalConfirm">추가</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 모달: 패스워드 변경 ===== -->
+<div class="modal-overlay hidden" id="changePwModal">
+  <div class="modal">
+    <h2>🔑 패스워드 변경</h2>
+    <label class="field-label">새 패스워드</label>
+    <input class="field-input" type="password" id="newPw1" placeholder="새 패스워드 입력" maxlength="30" autocomplete="new-password">
+    <label class="field-label">새 패스워드 확인</label>
+    <input class="field-input" type="password" id="newPw2" placeholder="다시 입력" maxlength="30" autocomplete="new-password">
+    <div class="error-msg" id="changePwError"></div>
+    <div class="modal-footer">
+      <button class="btn-cancel" id="changePwCancel">취소</button>
+      <button class="btn-confirm" id="changePwConfirm">변경</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ===== localStorage 키 =====
+  const KEY_ADMIN_PW  = 'admin_password';    // 관리자 패스워드
+  const KEY_CALENDARS = 'admin_calendars';   // 캘린더 목록
+
+  // ===== 테마 색상 12가지 =====
+  const THEME_COLORS = [
+    '#e74c3c', '#e67e22', '#f1c40f', '#27ae60',
+    '#1abc9c', '#3498db', '#5588ff', '#9b59b6',
+    '#e84393', '#34495e', '#00b894', '#fd79a8'
+  ];
+
+  // ===== 기본 내장 캘린더 2개 (kim-family.html, jhkim-hyeju.html) =====
+  const BUILTIN_CALENDARS = [
+    { id: 'builtin_family', name: '가족 캘린더',  emoji: '👨‍👩‍👧‍👦', color: '#3498db', file: 'kim-family.html',  builtin: true },
+    { id: 'builtin_hyeju',  name: '재현혜주네',   emoji: '💑',      color: '#e84393', file: 'jhkim-hyeju.html', builtin: true }
+  ];
+
+  // ===== 관리자 세션 (탭 닫으면 자동 로그아웃) =====
+  let isLoggedIn = sessionStorage.getItem('admin_logged') === '1';
+
+  // ===== 패스워드 로드/저장 =====
+  function loadPassword() {
+    return localStorage.getItem(KEY_ADMIN_PW) || '681100';
+  }
+  function savePassword(pw) {
+    localStorage.setItem(KEY_ADMIN_PW, pw);
+  }
+
+  // ===== 캘린더 목록 로드/저장 =====
+  // 저장된 목록이 없으면 기본 2개로 초기화
+  function loadCalendars() {
+    const raw = localStorage.getItem(KEY_CALENDARS);
+    return raw ? JSON.parse(raw) : [...BUILTIN_CALENDARS];
+  }
+  function saveCalendars(list) {
+    localStorage.setItem(KEY_CALENDARS, JSON.stringify(list));
+  }
+
+  // ===== 패스워드 화면 =====
+  function tryLogin() {
+    const input = document.getElementById('pwInput').value;
+    if (input === loadPassword()) {
+      sessionStorage.setItem('admin_logged', '1');
+      isLoggedIn = true;
+      document.getElementById('pwScreen').classList.add('hidden');
+      document.getElementById('pwInput').value = '';
+      showDashboard();
+    } else {
+      document.getElementById('pwError').textContent = '패스워드가 올바르지 않습니다.';
+      document.getElementById('pwInput').value = '';
+      document.getElementById('pwInput').focus();
+    }
+  }
+  document.getElementById('pwLoginBtn').addEventListener('click', tryLogin);
+  document.getElementById('pwInput').addEventListener('keypress', e => {
+    if (e.key === 'Enter') tryLogin();
+  });
+  document.getElementById('pwInput').addEventListener('input', () => {
+    document.getElementById('pwError').textContent = '';
+  });
+
+  // ===== 로그아웃 =====
+  document.getElementById('logoutBtn').addEventListener('click', () => {
+    sessionStorage.removeItem('admin_logged');
+    isLoggedIn = false;
+    document.getElementById('dashboard').classList.add('hidden');
+    document.getElementById('pwScreen').classList.remove('hidden');
+    document.getElementById('pwInput').focus();
+  });
+
+  // ===== 대시보드 렌더링 =====
+  function showDashboard() {
+    document.getElementById('dashboard').classList.remove('hidden');
+    renderCalendars();
+  }
+
+  function renderCalendars() {
+    const list = loadCalendars();
+    const grid = document.getElementById('calGrid');
+    grid.innerHTML = '';
+
+    list.forEach(cal => {
+      const card = document.createElement('div');
+      card.className = 'cal-card' + (cal.builtin ? ' builtin' : '');
+      card.style.borderTopColor = cal.color;
+
+      // 삭제 버튼 (내장 캘린더 제외)
+      if (!cal.builtin) {
+        const delBtn = document.createElement('button');
+        delBtn.className = 'del-btn';
+        delBtn.title = '캘린더 삭제';
+        delBtn.textContent = '✕';
+        delBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          deleteCalendar(cal.id);
+        });
+        card.appendChild(delBtn);
+      }
+
+      const emoji = document.createElement('div');
+      emoji.className = 'emoji';
+      emoji.textContent = cal.emoji;
+
+      const name = document.createElement('div');
+      name.className = 'cal-name';
+      name.textContent = cal.name;
+
+      const desc = document.createElement('div');
+      desc.className = 'cal-desc';
+      desc.textContent = cal.builtin ? '기본 캘린더' : '사용자 추가 캘린더';
+
+      const openBtn = document.createElement('a');
+      openBtn.className = 'open-btn';
+      openBtn.href = cal.file;
+      openBtn.textContent = '열기 →';
+      openBtn.style.background = cal.color;
+
+      card.appendChild(emoji);
+      card.appendChild(name);
+      card.appendChild(desc);
+      card.appendChild(openBtn);
+      grid.appendChild(card);
+    });
+
+    // 캘린더 추가 카드
+    const addCard = document.createElement('div');
+    addCard.className = 'add-cal-card';
+    addCard.innerHTML = '<div class="plus">＋</div><span>캘린더 추가</span>';
+    addCard.addEventListener('click', openAddModal);
+    grid.appendChild(addCard);
+  }
+
+  // ===== 캘린더 삭제 =====
+  function deleteCalendar(id) {
+    if (!confirm('이 캘린더를 목록에서 삭제하시겠습니까?\n(저장된 일정 데이터는 브라우저에 남아 있습니다)')) return;
+    const list = loadCalendars().filter(c => c.id !== id);
+    saveCalendars(list);
+    renderCalendars();
+  }
+
+  // ===== 캘린더 추가 모달 =====
+  let pickedColor = THEME_COLORS[5]; // 기본값: 파란색
+
+  function renderThemePalette() {
+    const palette = document.getElementById('themePalette');
+    palette.innerHTML = '';
+    THEME_COLORS.forEach(color => {
+      const sw = document.createElement('div');
+      sw.className = 'theme-swatch' + (color === pickedColor ? ' active' : '');
+      sw.style.background = color;
+      sw.addEventListener('click', () => {
+        pickedColor = color;
+        document.querySelectorAll('.theme-swatch').forEach(s => s.classList.toggle('active', s.style.background === color || s.style.backgroundColor === color));
+      });
+      palette.appendChild(sw);
+    });
+  }
+
+  function openAddModal() {
+    pickedColor = THEME_COLORS[5];
+    document.getElementById('newCalName').value = '';
+    document.getElementById('newCalEmoji').value = '📅';
+    renderThemePalette();
+    document.getElementById('addModal').classList.remove('hidden');
+    document.getElementById('newCalName').focus();
+  }
+
+  document.getElementById('addModalCancel').addEventListener('click', () => {
+    document.getElementById('addModal').classList.add('hidden');
+  });
+
+  document.getElementById('addModalConfirm').addEventListener('click', () => {
+    const name  = document.getElementById('newCalName').value.trim();
+    const emoji = document.getElementById('newCalEmoji').value.trim() || '📅';
+    if (!name) { document.getElementById('newCalName').focus(); return; }
+
+    // 고유 ID 생성 (시간 기반)
+    const id   = 'cal_' + Date.now().toString(36);
+    // 새 캘린더는 calendar.html?id=XXX 로 열림
+    const file = `calendar.html?id=${id}`;
+
+    const list = loadCalendars();
+    list.push({ id, name, emoji, color: pickedColor, file, builtin: false });
+    saveCalendars(list);
+
+    document.getElementById('addModal').classList.add('hidden');
+    renderCalendars();
+  });
+
+  // 모달 배경 클릭 시 닫기
+  document.getElementById('addModal').addEventListener('click', e => {
+    if (e.target === document.getElementById('addModal')) document.getElementById('addModal').classList.add('hidden');
+  });
+
+  // ===== 패스워드 변경 모달 =====
+  document.getElementById('changePwBtn').addEventListener('click', () => {
+    document.getElementById('newPw1').value = '';
+    document.getElementById('newPw2').value = '';
+    document.getElementById('changePwError').textContent = '';
+    document.getElementById('changePwModal').classList.remove('hidden');
+    document.getElementById('newPw1').focus();
+  });
+
+  document.getElementById('changePwCancel').addEventListener('click', () => {
+    document.getElementById('changePwModal').classList.add('hidden');
+  });
+
+  document.getElementById('changePwConfirm').addEventListener('click', confirmChangePassword);
+  document.getElementById('newPw2').addEventListener('keypress', e => {
+    if (e.key === 'Enter') confirmChangePassword();
+  });
+
+  function confirmChangePassword() {
+    const pw1 = document.getElementById('newPw1').value;
+    const pw2 = document.getElementById('newPw2').value;
+    if (!pw1) {
+      document.getElementById('changePwError').textContent = '새 패스워드를 입력하세요.';
+      return;
+    }
+    if (pw1 !== pw2) {
+      document.getElementById('changePwError').textContent = '패스워드가 일치하지 않습니다.';
+      return;
+    }
+    savePassword(pw1);
+    document.getElementById('changePwModal').classList.add('hidden');
+    alert('패스워드가 변경되었습니다.');
+  }
+
+  document.getElementById('changePwModal').addEventListener('click', e => {
+    if (e.target === document.getElementById('changePwModal')) document.getElementById('changePwModal').classList.add('hidden');
+  });
+
+  // ===== 초기화 =====
+  // 이미 로그인된 세션이면 바로 대시보드로
+  if (isLoggedIn) {
+    document.getElementById('pwScreen').classList.add('hidden');
+    showDashboard();
+  } else {
+    document.getElementById('pwInput').focus();
+  }
+</script>
 </body>
 </html>
