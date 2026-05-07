@@ -17,7 +17,7 @@ context/
 │   ├── calendar.css        # 3개 캘린더가 공유하는 모든 스타일
 │   └── calendar.js         # 모든 JS 로직 + HTML 구조 (insertAdjacentHTML)
 ├── kim-family.html         # 가족 캘린더 (prefix: family)
-├── jhkim-hyeju.html        # 재현♥혜주네 캘린더 (prefix: hyeju)
+├── jhkim-hyeju.html        # JHJ쀼♥ 캘린더 (prefix: hyeju)
 ├── calendar.html           # 동적 캘린더 (prefix: cal_${id})
 ├── index.html              # 관리자/홈 (별도 — 공통 로직 미사용)
 ├── package.json            # @vercel/kv 의존성
