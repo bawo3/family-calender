@@ -498,32 +498,21 @@
         const more=document.createElement('div');more.className='event-bar bar-single';
         more.style.background='#95a5a6';more.textContent=`+${deduped.length-2}개 더`;cell.appendChild(more);
       }
-      cell.dataset.date=dateStr;
-      cell.addEventListener('mousedown',e=>{e.preventDefault();isDragging=true;dragStart=dateStr;dragEnd=dateStr;renderCalendar();});
+      cell.addEventListener('click',()=>{
+        if(!isDragging){
+          isDragging=true;dragStart=dateStr;dragEnd=dateStr;
+          renderCalendar();renderEventList();
+        }else{
+          isDragging=false;
+          selectedStart=minDate(dragStart,dateStr);selectedEnd=maxDate(dragStart,dateStr);
+          dragStart=dragEnd=null;activateInputs();updateSelectedLabel();renderCalendar();renderEventList();
+        }
+      });
       cell.addEventListener('mouseenter',()=>{if(!isDragging)return;dragEnd=dateStr;renderCalendar();});
-      cell.addEventListener('touchstart',e=>{e.preventDefault();isDragging=true;dragStart=dateStr;dragEnd=dateStr;renderCalendar();},{passive:false});
       grid.appendChild(cell);
     }
     renderImportantBanner();
   }
-
-  document.addEventListener('mouseup',()=>{
-    if(!isDragging)return;isDragging=false;
-    if(dragStart&&dragEnd){selectedStart=minDate(dragStart,dragEnd);selectedEnd=maxDate(dragStart,dragEnd);activateInputs();updateSelectedLabel();}
-    dragStart=dragEnd=null;renderCalendar();renderEventList();
-  });
-  document.addEventListener('touchmove',e=>{
-    if(!isDragging)return;
-    e.preventDefault();
-    const t=e.touches[0];
-    const el=document.elementFromPoint(t.clientX,t.clientY);
-    if(el&&el.dataset.date){dragEnd=el.dataset.date;renderCalendar();}
-  },{passive:false});
-  document.addEventListener('touchend',()=>{
-    if(!isDragging)return;isDragging=false;
-    if(dragStart&&dragEnd){selectedStart=minDate(dragStart,dragEnd);selectedEnd=maxDate(dragStart,dragEnd);activateInputs();updateSelectedLabel();}
-    dragStart=dragEnd=null;renderCalendar();renderEventList();
-  });
 
   function activateInputs(){
     ['eventInput','eventFrom','eventTo','importantCheck'].forEach(id=>document.getElementById(id).disabled=false);
