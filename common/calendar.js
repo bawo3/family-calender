@@ -462,9 +462,6 @@
             cache.notices.forEach(n=>seen.add(n.id));
             saveSeenIds(seen);
             await registerPushSubscription();
-          } else {
-            // 여전히 거부 → 브라우저 설정 안내
-            await showNotifyPermModal(true);
           }
           updateAlarmBtn();
         }
