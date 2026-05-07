@@ -140,6 +140,14 @@
   .saved-user-chip:hover { background:var(--chip-hover); }
   .saved-user-chip .dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
   .saved-user-chip .skin-icon { font-size:11px; opacity:0.7; }
+  /* 다른 캘린더에서 온 사용자: 점선 테두리로 구분 */
+  .saved-user-chip.other-cal { border-style: dashed; opacity: 0.82; }
+  /* 빠른 로그인 섹션 (로그인 폼 최상단) */
+  .quick-login { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+  .quick-login h3 { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
+  .quick-login-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .quick-login-label { font-size: 11px; color: var(--text-secondary); width: 100%; margin: 4px 0 2px; }
+  .quick-login-divider { width: 100%; height: 1px; background: var(--border); margin: 6px 0 2px; }
 
   /* ===== 캘린더 화면 ===== */
   .top-bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px; }
@@ -217,6 +225,12 @@
   <h1>👨‍👩‍👧‍👦 가족 캘린더</h1>
   <p>이름 입력 → 스킨 · 색상 선택 후 로그인하세요</p>
 
+  <!-- 모든 캘린더 사용자 통합 빠른 선택 -->
+  <div class="quick-login" id="quickLoginSection">
+    <h3>👤 사용자 선택 (클릭하면 자동 입력)</h3>
+    <div class="quick-login-list" id="quickLoginList"></div>
+  </div>
+
   <label for="nameInput">이름</label>
   <input type="text" id="nameInput" placeholder="예: 아빠, 엄마, 재현" maxlength="20">
 
@@ -235,11 +249,6 @@
   </div>
 
   <button class="login-btn" id="loginBtn" disabled>로그인</button>
-
-  <div class="saved-users">
-    <h3>👥 저장된 가족 (클릭하면 자동 입력)</h3>
-    <div class="saved-user-list" id="savedUserList"></div>
-  </div>
 </div>
 
 <!-- ===== 캘린더 화면 ===== -->
@@ -402,33 +411,62 @@
     document.getElementById('loginBtn').disabled = !(name && selectedColor);
   }
 
+  // 모든 캘린더(family, hyeju, 동적 추가분)의 사용자를 합산해서 반환
+  function loadAllUsers() {
+    const parseRaw = raw => {
+      if (!raw) return {};
+      const p = JSON.parse(raw);
+      const r = {};
+      Object.keys(p).forEach(n => { const v=p[n]; r[n]=(typeof v==='string')?{color:v,skin:'light'}:v; });
+      return r;
+    };
+    const merged = {};
+    // 현재 캘린더 사용자 먼저 (같은 이름이 있으면 이 데이터 우선)
+    Object.entries(parseRaw(localStorage.getItem(KEY_USERS))).forEach(([n,v]) => { merged[n]={...v, fromCurrent:true}; });
+    // 나머지 캘린더 키 목록
+    const adminRaw = localStorage.getItem('admin_calendars');
+    const cals = adminRaw ? JSON.parse(adminRaw) : [];
+    const otherKeys = ['family_users','hyeju_users',...cals.filter(c=>!c.builtin).map(c=>`cal_${c.id}_users`)]
+      .filter(k => k !== KEY_USERS);
+    otherKeys.forEach(key => {
+      Object.entries(parseRaw(localStorage.getItem(key))).forEach(([n,v]) => {
+        if (!merged[n]) merged[n] = {...v, fromCurrent:false};
+      });
+    });
+    return merged;
+  }
+
   function renderSavedUsers() {
-    const users = loadUsers();
-    const list  = document.getElementById('savedUserList');
+    const users = loadAllUsers();
+    const section = document.getElementById('quickLoginSection');
+    const list    = document.getElementById('quickLoginList');
     list.innerHTML = '';
     const names = Object.keys(users);
-    if (!names.length) {
-      list.innerHTML = '<span style="color:var(--empty-msg);font-size:12px;">저장된 사용자가 없습니다</span>';
-      return;
+    if (!names.length) { section.style.display='none'; return; }
+    section.style.display = '';
+    // 현재 캘린더 사용자 먼저, 다른 캘린더 사용자 나중
+    const sorted = [...names].sort((a,b) => (users[b].fromCurrent?1:0)-(users[a].fromCurrent?1:0));
+    const hasCurrent = sorted.some(n=>users[n].fromCurrent);
+    let otherLabelShown = false;
+    if (hasCurrent) {
+      const lbl=document.createElement('div'); lbl.className='quick-login-label'; lbl.textContent='이 캘린더'; list.appendChild(lbl);
     }
-    names.forEach(name => {
-      const u    = users[name];
-      const chip = document.createElement('div');
-      chip.className = 'saved-user-chip';
-      const dot = document.createElement('span');
-      dot.className = 'dot';
-      dot.style.background = u.color;
-      const label = document.createElement('span');
-      label.textContent = name;
-      const icon = document.createElement('span');
-      icon.className = 'skin-icon';
-      icon.textContent = u.skin==='dark' ? '🌙' : '☀️';
+    sorted.forEach(name => {
+      const u = users[name];
+      if (!u.fromCurrent && !otherLabelShown) {
+        if (hasCurrent) {
+          const div=document.createElement('div'); div.className='quick-login-divider'; list.appendChild(div);
+        }
+        const lbl=document.createElement('div'); lbl.className='quick-login-label'; lbl.textContent='다른 캘린더'; list.appendChild(lbl);
+        otherLabelShown=true;
+      }
+      const chip=document.createElement('div');
+      chip.className='saved-user-chip'+(u.fromCurrent?'':' other-cal');
+      const dot=document.createElement('span'); dot.className='dot'; dot.style.background=u.color;
+      const label=document.createElement('span'); label.textContent=name;
+      const icon=document.createElement('span'); icon.className='skin-icon'; icon.textContent=u.skin==='dark'?'🌙':'☀️';
       chip.appendChild(dot); chip.appendChild(label); chip.appendChild(icon);
-      chip.addEventListener('click', () => {
-        document.getElementById('nameInput').value = name;
-        pickColor(u.color);
-        setLoginSkin(u.skin||'light');
-      });
+      chip.addEventListener('click',()=>{ document.getElementById('nameInput').value=name; pickColor(u.color); setLoginSkin(u.skin||'light'); });
       list.appendChild(chip);
     });
   }
