@@ -542,13 +542,13 @@
         const rb=document.createElement('span');rb.className='event-range';
         rb.textContent=`📅 ${ev.startDate} ~ ${ev.endDate}`;content.appendChild(rb);
       }
+      const tx=document.createElement('span');tx.className='event-text';
+      tx.textContent=ev.text;content.appendChild(tx);
       const ts=formatTimeRange(ev.from,ev.to);
       if(ts){
         const tb=document.createElement('span');tb.className='event-time';
         tb.textContent=`⏰ ${ts}`;content.appendChild(tb);
       }
-      const tx=document.createElement('span');tx.className='event-text';
-      tx.textContent=ev.text;content.appendChild(tx);
       const btn=document.createElement('button');btn.className='delete-btn';btn.textContent='삭제';
       btn.addEventListener('click',()=>deleteEvent(ev.id));
       li.appendChild(content);li.appendChild(btn);list.appendChild(li);
