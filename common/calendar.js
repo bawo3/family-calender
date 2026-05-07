@@ -129,6 +129,20 @@
   </div>
 </div>
 
+<div class="modal-overlay hidden" id="phoneAuthModal">
+  <div class="modal-box" style="max-width:340px;">
+    <h2>🔐 휴대폰 인증</h2>
+    <p id="phoneAuthBody" style="font-size:14px;color:var(--text-base);line-height:1.6;margin-bottom:12px;"></p>
+    <input type="tel" id="phoneAuthInput" placeholder="01012345678" inputmode="numeric"
+      style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:14px;background:var(--input-bg);color:var(--text-base);box-sizing:border-box;margin-bottom:8px;">
+    <p id="phoneAuthError" style="color:#e74c3c;font-size:12px;min-height:16px;margin:0 0 8px 0;"></p>
+    <div class="modal-actions">
+      <button class="modal-btn cancel" id="phoneAuthCancelBtn">취소</button>
+      <button class="modal-btn primary" id="phoneAuthOkBtn">확인</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay hidden" id="iosInstallModal">
   <div class="modal-box" style="max-width:380px;">
     <h2>📱 iPhone 알림 받기</h2>
@@ -191,8 +205,8 @@
     '#e8daef','#d2b4de','#bb8fce','#a569bd','#8e44ad','#6c3483'
   ];
 
-  let currentDate=new Date(), selectedColor=null, selectedSkin='light';
-  let currentUser=null, currentUserColor=null, currentUserSkin='light';
+  let currentDate=new Date(), selectedColor=null, selectedSkin='dark';
+  let currentUser=null, currentUserColor=null, currentUserSkin='dark';
   let selectedStart=null, selectedEnd=null;
   let tapFirst=null; // 1번째 탭 날짜 (null=미선택, string=2번째 탭 대기 중)
   let editingEventId=null; // 수정 중인 일정 ID (null=추가 모드)
@@ -459,7 +473,7 @@
       chip.appendChild(dot);chip.appendChild(lbl);chip.appendChild(icon);
       chip.addEventListener('click',()=>{
         document.getElementById('nameInput').value=name;
-        pickColor(u.color);setLoginSkin(u.skin||'light');login();
+        pickColor(u.color);setLoginSkin(u.skin||'dark');login();
       });
       list.appendChild(chip);
     });
@@ -482,11 +496,111 @@
     await Promise.allSettled(namesToDelete.map(n => apiDeleteUser(n)));
   }
 
+  // -----------------------------------------
+  // 휴대폰 인증 모달 (패스워드 대용)
+  //   - DB에 phone 없으면 → 신규 등록 모드 (입력 → DB 저장 + localStorage 캐시)
+  //   - DB에 phone 있고 localStorage 미저장(=새 기기) → 검증 모드 (입력 → DB와 비교 → 일치 시 캐시)
+  //   - localStorage에 저장돼있고 일치하면 → 자동 통과
+  // 반환: 입력된 phone 문자열(성공) 또는 null(취소/실패)
+  // -----------------------------------------
+  function phoneKey(name){ return `${PREFIX}_phone_${name}`; }
+  function showPhoneAuthModal(mode, name){
+    return new Promise(resolve=>{
+      const overlay=document.getElementById('phoneAuthModal');
+      const body=document.getElementById('phoneAuthBody');
+      const input=document.getElementById('phoneAuthInput');
+      const errBox=document.getElementById('phoneAuthError');
+      const okBtn=document.getElementById('phoneAuthOkBtn');
+      const cancelBtn=document.getElementById('phoneAuthCancelBtn');
+      input.value=''; errBox.textContent='';
+      body.textContent = mode==='register'
+        ? `${name} 님 최초 로그인입니다.\n사용하실 휴대폰 번호를 등록해주세요.`
+        : `${name} 님, 등록된 휴대폰 번호를 입력해주세요.`;
+      overlay.classList.remove('hidden');
+      setTimeout(()=>input.focus(),50);
+
+      const cleanup=val=>{
+        overlay.classList.add('hidden');
+        okBtn.removeEventListener('click',onOk);
+        cancelBtn.removeEventListener('click',onCancel);
+        input.removeEventListener('keypress',onKey);
+        resolve(val);
+      };
+      const onCancel=()=>cleanup(null);
+      const onKey=e=>{ if(e.key==='Enter') onOk(); };
+      const onOk=async()=>{
+        const phone=input.value.replace(/[^0-9]/g,'');
+        if(phone.length<9){ errBox.textContent='유효한 번호를 입력해주세요.'; return; }
+        okBtn.disabled=true;
+        try{
+          if(mode==='register'){
+            // DB에 phone 저장
+            await fetchJSON(`${API}/users?prefix=${encodeURIComponent(PREFIX)}`,{
+              method:'POST', headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({ name, color: selectedColor, skin: selectedSkin, phone })
+            });
+            localStorage.setItem(phoneKey(name), phone);
+            cleanup(phone);
+          } else {
+            // 검증 모드 — DB와 비교
+            const r=await fetchJSON(`${API}/users?prefix=${encodeURIComponent(PREFIX)}&action=verify`,{
+              method:'POST', headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({ name, phone })
+            });
+            if(r && r.ok){
+              localStorage.setItem(phoneKey(name), phone);
+              cleanup(phone);
+            } else {
+              errBox.textContent='휴대폰 번호가 일치하지 않습니다.';
+              okBtn.disabled=false;
+            }
+          }
+        } catch(e){
+          errBox.textContent='서버 오류: '+e.message;
+          okBtn.disabled=false;
+        }
+      };
+      okBtn.disabled=false;
+      okBtn.addEventListener('click',onOk);
+      cancelBtn.addEventListener('click',onCancel);
+      input.addEventListener('keypress',onKey);
+    });
+  }
+
+  // 로그인 시 휴대폰 인증 (필요 시 모달). 통과 시 true, 실패/취소 시 false 반환.
+  async function ensurePhoneAuth(name){
+    if(localMode) return true; // 로컬 폴백 모드는 인증 생략
+    // 최신 사용자 정보 조회 — hasPhone 확인용
+    let users;
+    try { users = await fetchJSON(`${API}/users?prefix=${encodeURIComponent(PREFIX)}`); }
+    catch(e){ console.error('users 조회 실패:', e); return true; /* 서버 조회 실패 시 진행 */ }
+    const info = users && users[name];
+    const hasPhone = info && info.hasPhone;
+    if(!hasPhone){
+      // 신규 등록
+      const result=await showPhoneAuthModal('register', name);
+      return !!result;
+    }
+    // 이미 등록된 사용자 — localStorage 확인
+    const cached = localStorage.getItem(phoneKey(name));
+    if(cached){
+      // 한번 캐시된 기기는 빠르게 통과 (DB와 검증 안 함 — 신뢰)
+      return true;
+    }
+    // 새 기기 — 검증 모달
+    const result=await showPhoneAuthModal('verify', name);
+    return !!result;
+  }
+
   async function login(){
     const name=document.getElementById('nameInput').value.trim();
     if(!name||!selectedColor)return;
-    document.getElementById('loginBtn').disabled=true;
+    const loginBtn=document.getElementById('loginBtn');
+    loginBtn.disabled=true;
     try{
+      // 휴대폰 인증 통과해야 진행
+      const ok=await ensurePhoneAuth(name);
+      if(!ok){ loginBtn.disabled=false; return; }
       const prevColor = cache.users[name]?.color;
       await apiUpsertUser(name, selectedColor, selectedSkin);
       // 색상이 바뀐 경우 서버/로컬에서 일정 색까지 자동 동기화 → 캐시 갱신
@@ -499,13 +613,13 @@
     }catch(e){
       alert(localMode?'로그인 실패: '+e.message:'로그인 실패: 서버 연결을 확인하세요.');
       console.error(e);
-      document.getElementById('loginBtn').disabled=false;
+      loginBtn.disabled=false;
     }
   }
   function logout(){
     localStorage.removeItem(KEY_CURRENT);
-    currentUser=currentUserColor=null;currentUserSkin='light';
-    selectedStart=selectedEnd=null;selectedColor=null;selectedSkin='light';
+    currentUser=currentUserColor=null;currentUserSkin='dark';
+    selectedStart=selectedEnd=null;selectedColor=null;selectedSkin='dark';
     document.getElementById('nameInput').value='';
     document.querySelectorAll('.color-cell').forEach(c=>c.classList.remove('active'));
     document.getElementById('selectedSwatch').style.background='#bdc3c7';
@@ -516,7 +630,7 @@
     document.getElementById('importantCheck').checked=false;
     document.getElementById('importantCheck').disabled=true;
     document.getElementById('addBtn').disabled=true;
-    setLoginSkin('light');
+    setLoginSkin('dark');
     document.getElementById('loginBox').classList.remove('hidden');
     document.getElementById('calendarBox').classList.add('hidden');
     renderSavedUsers();
@@ -1355,6 +1469,8 @@
     }
     overlay.classList.add('hidden');
     document.getElementById('loginBox').classList.remove('hidden');
+    // 기본 스킨 다크 적용 (로그인 화면)
+    setLoginSkin('dark');
     // 로컬 모드 배너 표시
     if(localMode){
       const banner=document.createElement('div');
@@ -1370,8 +1486,8 @@
       const u=cache.users[savedName];
       if(u){
         currentUser=savedName;
-        currentUserColor=u.color;currentUserSkin=u.skin||'light';
-        selectedColor=u.color;selectedSkin=u.skin||'light';
+        currentUserColor=u.color;currentUserSkin=u.skin||'dark';
+        selectedColor=u.color;selectedSkin=u.skin||'dark';
         showCalendar(true); // 자동 로그인 시 공지 자동 팝업
       }
     }
