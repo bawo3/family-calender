@@ -312,14 +312,6 @@
     cache.users[name] = { color, skin };
     cache.allUsers[name] = { color, skin, fromCurrent:true };
   }
-  async function apiDeleteUser(name){
-    if(localMode){
-      const users=lsGet(LS_USERS,{}); delete users[name]; lsSet(LS_USERS,users);
-      delete cache.users[name]; delete cache.allUsers[name]; return;
-    }
-    await fetchJSON(`${API}/users?prefix=${encodeURIComponent(PREFIX)}&name=${encodeURIComponent(name)}`,{method:'DELETE'});
-    delete cache.users[name]; delete cache.allUsers[name];
-  }
   async function apiAddNotice(n){
     if(localMode){
       const notices=lsGet(LS_NOTICES,[]); notices.unshift(n); lsSet(LS_NOTICES,notices);
@@ -481,8 +473,6 @@
   }
 
   async function renderSavedUsers(){
-    // 캘린더에 이력(일정)이 없는 사용자 자동 삭제
-    await pruneInactiveUsers();
     // 인원 제한 상태 반영 — 가득 차면 신규 등록 폼 숨김
     await applyCapacityState();
     const users = loadAllUsers();
@@ -507,22 +497,6 @@
     });
   }
 
-  // 캘린더별 삭제 금지 사용자 화이트리스트 (이력 없어도 보존)
-  const PROTECTED_USERS = {
-    family: ['김주영','강민선','김정현','김재현']
-  };
-  // 일정 이력이 없는 사용자를 서버/캐시에서 삭제 (로그인 화면 진입 시 정리)
-  async function pruneInactiveUsers(){
-    const users = loadAllUsers();
-    const events = loadEvents();
-    const activeNames = new Set(events.map(e => e.user));
-    const protectedSet = new Set(PROTECTED_USERS[PREFIX] || []);
-    const namesToDelete = Object.keys(users)
-      .filter(n => !activeNames.has(n) && !protectedSet.has(n));
-    if(!namesToDelete.length) return;
-    // 병렬 삭제 — 실패해도 다른 삭제는 진행
-    await Promise.allSettled(namesToDelete.map(n => apiDeleteUser(n)));
-  }
 
   // -----------------------------------------
   // 휴대폰 인증 모달 (패스워드 대용)
