@@ -208,6 +208,20 @@ body.dark .event-list li.holiday-item{background:rgba(231,76,60,0.15);}
 .local-mode-banner{background:#fff3cd;border:1px solid #ffc107;color:#856404;padding:7px 12px;font-size:12px;text-align:center;border-radius:6px;margin:6px 0 2px;}
 body.dark .local-mode-banner{background:#2a1f00;border-color:#856404;color:#ffd060;}
 
+/* PWA 설치 유도 바 (컨테이너 맨 아래) */
+.pwa-install-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:20px;padding:12px 14px;background:var(--panel-bg);border:1px solid var(--border);border-radius:8px;font-size:13px;}
+body.dark .pwa-install-bar{background:rgba(255,255,255,0.04);}
+.pwa-install-txt{flex:1;min-width:0;color:var(--text-secondary);line-height:1.4;}
+.pwa-install-btn{background:var(--accent);color:#fff;border:none;padding:7px 16px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold;white-space:nowrap;transition:background .15s;}
+.pwa-install-btn:hover{background:var(--accent-dark);}
+.pwa-dismiss-btn{background:none;border:none;color:var(--text-secondary);font-size:16px;cursor:pointer;padding:4px 6px;line-height:1;flex-shrink:0;}
+.pwa-dismiss-btn:hover{color:var(--text-primary);}
+@media(max-width:480px){
+  .pwa-install-bar{gap:8px;}
+  .pwa-install-txt{font-size:12px;}
+  .pwa-install-btn{padding:6px 12px;font-size:12px;}
+}
+
 /* =========================================
    기념일 · 생일 관련 스타일
    ========================================= */

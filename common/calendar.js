@@ -108,6 +108,61 @@
   setupPWAIcons();
 
   // -----------------------------------------
+  // PWA 설치 유도 (하단 바)
+  // -----------------------------------------
+  let _deferredInstallPrompt = null;
+  const PWA_DISMISS_KEY = `${PREFIX}_pwa_dismissed`;
+
+  function _isStandalone(){
+    return navigator.standalone===true ||
+      window.matchMedia('(display-mode: standalone)').matches;
+  }
+  function _showInstallBar(){
+    if(_isStandalone()) return;                          // 이미 설치됨
+    if(sessionStorage.getItem(PWA_DISMISS_KEY)) return; // 이번 세션 닫기 클릭
+    const bar=document.getElementById('pwaInstallBar');
+    if(bar) bar.classList.remove('hidden');
+  }
+  function _hideInstallBar(){
+    const bar=document.getElementById('pwaInstallBar');
+    if(bar) bar.classList.add('hidden');
+  }
+
+  // Android/Chrome: 설치 프롬프트 이벤트 캡처
+  window.addEventListener('beforeinstallprompt', e=>{
+    e.preventDefault();
+    _deferredInstallPrompt=e;
+    _showInstallBar();
+  });
+  // 설치 완료 시 자동 숨김
+  window.addEventListener('appinstalled', ()=>{
+    _hideInstallBar();
+    _deferredInstallPrompt=null;
+  });
+
+  async function _triggerInstall(){
+    if(_deferredInstallPrompt){
+      // Android/Chrome: 시스템 설치 다이얼로그
+      _deferredInstallPrompt.prompt();
+      const {outcome}=await _deferredInstallPrompt.userChoice;
+      _deferredInstallPrompt=null;
+      if(outcome==='accepted') _hideInstallBar();
+    } else if(isIOS()){
+      // iOS: 수동 안내 모달 (기존 iosInstallModal 재사용)
+      showIOSInstallModal();
+    } else {
+      // Chrome 데스크탑 등 — 이미 설치됐거나 불가
+      alert('이 브라우저에서는 주소창 오른쪽의 설치 아이콘(⊕)을 눌러 설치할 수 있어요.');
+    }
+  }
+
+  // iOS이면서 standalone 아닌 경우에도 설치 바 표시
+  if(isIOS() && !_isStandalone()){
+    // DOM이 준비된 뒤 표시 (HTML_TEMPLATE 주입 전이므로 지연)
+    setTimeout(_showInstallBar, 0);
+  }
+
+  // -----------------------------------------
   // 2) HTML 구조 + 로딩 오버레이 주입
   // -----------------------------------------
   const HTML_TEMPLATE = `
@@ -193,6 +248,13 @@
       <button id="addBtn" disabled>추가</button>
     </div>
     <ul class="event-list" id="eventList"></ul>
+  </div>
+
+  <!-- 앱 설치 안내 바 (standalone 모드이면 자동 숨김) -->
+  <div id="pwaInstallBar" class="pwa-install-bar hidden">
+    <span class="pwa-install-txt">📲 이 캘린더를 홈 화면에 추가하면 앱처럼 사용할 수 있어요</span>
+    <button class="pwa-install-btn" id="pwaInstallBtn">설치하기</button>
+    <button class="pwa-dismiss-btn" id="pwaInstallDismiss" title="닫기">✕</button>
   </div>
 </div>
 
@@ -1045,6 +1107,7 @@
     document.getElementById('userName').textContent=currentUser;
     document.getElementById('userDot').style.background=currentUserColor;
     updateSkinSwitchBtn();renderCalendar();renderEventList();
+    _showInstallBar(); // 로그인 후 설치 바 표시 시도
     // 권한 상태 동기화 (외부 거부 시 KEY_NOTIFY_ON='0' 설정)
     if(autoNotice) syncNotifyPermission();
     // 알림 OFF 상태면 동의/거부 모달 (공지 유무와 무관, 세션당 1회)
@@ -1951,6 +2014,11 @@
   document.getElementById('noticeBtn').addEventListener('click',openNoticeModal);
   document.getElementById('noticeCloseBtn').addEventListener('click',closeNoticeModal);
   document.getElementById('noticeAddBtn').addEventListener('click',addNotice);
+  document.getElementById('pwaInstallBtn').addEventListener('click', _triggerInstall);
+  document.getElementById('pwaInstallDismiss').addEventListener('click', ()=>{
+    sessionStorage.setItem(PWA_DISMISS_KEY,'1');
+    _hideInstallBar();
+  });
   document.getElementById('anniversaryBtn').addEventListener('click',openAnniversaryModal);
   document.getElementById('anniversaryCloseBtn').addEventListener('click',closeAnniversaryModal);
   document.getElementById('anniversaryAddBtn').addEventListener('click',addAnniversary);
