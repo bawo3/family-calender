@@ -374,7 +374,7 @@
       <input type="text" class="anniv-input" id="annivName" placeholder="이름 또는 설명 (예: 혜주, 우리 기념일)" maxlength="30">
       <input type="date" class="anniv-input" id="annivDate">
       <label class="anniv-check-label" id="annivLunarLabel">
-        <input type="checkbox" id="annivLunar">🌙 음력날짜 같이 표시
+        <input type="checkbox" id="annivLunar">🌙 음력으로도 표시
       </label>
       <label class="anniv-check-label hidden" id="anniv100dayLabel">
         <input type="checkbox" id="anniv100days">📅 매 100일마다 캘린더에 표기
