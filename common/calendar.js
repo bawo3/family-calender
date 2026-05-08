@@ -46,49 +46,49 @@
       const emojiMatch=TITLE.match(emojiRe);
       const emoji=emojiMatch?emojiMatch[0]:'📅';
 
-      // 512×512 캔버스 아이콘 생성
-      const sz=512, r2=sz*0.22;
-      const cv=document.createElement('canvas');cv.width=sz;cv.height=sz;
-      const cx=cv.getContext('2d');
-      // 둥근 사각형 배경 (accent 색)
-      cx.fillStyle=accent;
-      cx.beginPath();
-      cx.moveTo(r2,0);cx.lineTo(sz-r2,0);
-      cx.arcTo(sz,0,sz,r2,r2);cx.lineTo(sz,sz-r2);
-      cx.arcTo(sz,sz,sz-r2,sz,r2);cx.lineTo(r2,sz);
-      cx.arcTo(0,sz,0,sz-r2,r2);cx.lineTo(0,r2);
-      cx.arcTo(0,0,r2,0,r2);cx.closePath();cx.fill();
-      // 흰색 달력 작은 아이콘 (배경)
-      const pad=sz*0.18, cr=sz*0.06;
-      cx.fillStyle='rgba(255,255,255,0.22)';
-      cx.beginPath();
-      cx.moveTo(pad+cr,pad);cx.lineTo(sz-pad-cr,pad);
-      cx.arcTo(sz-pad,pad,sz-pad,pad+cr,cr);cx.lineTo(sz-pad,sz-pad-cr);
-      cx.arcTo(sz-pad,sz-pad,sz-pad-cr,sz-pad,cr);cx.lineTo(pad+cr,sz-pad);
-      cx.arcTo(pad,sz-pad,pad,sz-pad-cr,cr);cx.lineTo(pad,pad+cr);
-      cx.arcTo(pad,pad,pad+cr,pad,cr);cx.closePath();cx.fill();
-      // 이모지
-      cx.font=`${sz*0.5}px serif`;
-      cx.textAlign='center';cx.textBaseline='middle';
-      cx.fillText(emoji,sz/2,sz/2+sz*0.02);
-      const iconUrl=cv.toDataURL('image/png');
+      // sz 크기의 아이콘 캔버스 생성 (재사용 헬퍼)
+      function makeIconCanvas(sz){
+        const cv=document.createElement('canvas');cv.width=sz;cv.height=sz;
+        const cx=cv.getContext('2d');
+        const r=sz*0.20; // 둥근 모서리 반지름 (20%)
 
-      // apple-touch-icon (iOS)
+        // 배경 — accent 색 꽉 채우기
+        cx.fillStyle=accent;
+        cx.beginPath();
+        cx.moveTo(r,0);cx.lineTo(sz-r,0);
+        cx.arcTo(sz,0,sz,r,r);cx.lineTo(sz,sz-r);
+        cx.arcTo(sz,sz,sz-r,sz,r);cx.lineTo(r,sz);
+        cx.arcTo(0,sz,0,sz-r,r);cx.lineTo(0,r);
+        cx.arcTo(0,0,r,0,r);cx.closePath();cx.fill();
+
+        // 이모지 — 캔버스의 55% 크기로 중앙 배치 (여백 확보)
+        cx.font=`${Math.floor(sz*0.55)}px serif`;
+        cx.textAlign='center';cx.textBaseline='middle';
+        cx.fillText(emoji,sz/2,sz/2+sz*0.02);
+        return cv;
+      }
+
+      const icon192=makeIconCanvas(192).toDataURL('image/png');
+      const icon512=makeIconCanvas(512).toDataURL('image/png');
+      const icon180=makeIconCanvas(180).toDataURL('image/png'); // iOS 전용
+
+      // apple-touch-icon (iOS 180×180)
       let atl=document.querySelector('link[rel="apple-touch-icon"]');
       if(!atl){atl=document.createElement('link');atl.rel='apple-touch-icon';document.head.appendChild(atl);}
-      atl.href=iconUrl;
+      atl.href=icon180;
 
-      // favicon
+      // favicon (브라우저 탭)
       let fav=document.querySelector('link[rel="icon"]');
       if(!fav){fav=document.createElement('link');fav.rel='icon';fav.type='image/png';document.head.appendChild(fav);}
-      fav.href=iconUrl;
+      fav.href=icon192;
 
       // theme-color 메타 동기화
       let tm=document.querySelector('meta[name="theme-color"]');
       if(!tm){tm=document.createElement('meta');tm.name='theme-color';document.head.appendChild(tm);}
       tm.content=accent;
 
-      // Web App Manifest (Android + Chrome 설치 프롬프트)
+      // Web App Manifest
+      // purpose:'any' 만 사용 — 'maskable' 포함 시 Android 런처가 원형 크롭해서 확대 현상 발생
       const mData={
         name:TITLE,
         short_name:TITLE.replace(/\s+/g,' ').trim().slice(0,15),
@@ -96,7 +96,10 @@
         display:'standalone',
         background_color:accent,
         theme_color:accent,
-        icons:[{src:iconUrl,sizes:'512x512',type:'image/png',purpose:'any maskable'}]
+        icons:[
+          {src:icon192,sizes:'192x192',type:'image/png',purpose:'any'},
+          {src:icon512,sizes:'512x512',type:'image/png',purpose:'any'}
+        ]
       };
       const mBlob=new Blob([JSON.stringify(mData)],{type:'application/manifest+json'});
       const mUrl=URL.createObjectURL(mBlob);
