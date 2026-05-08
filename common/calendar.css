@@ -105,6 +105,11 @@ body.dark .important-banner .b-item{border-top-color:rgba(255,255,255,0.08);}
 body.dark .b-section-title{color:#f07060;}
 .b-section-gap{margin-top:10px;padding-top:8px;border-top:1px solid rgba(0,0,0,0.07);}
 body.dark .b-section-gap{border-top-color:rgba(255,255,255,0.08);}
+/* 이번달 지난 일정 헤더 — 클릭 접기/펼치기 */
+.b-past-header{cursor:pointer;user-select:none;display:flex;align-items:center;gap:4px;}
+.b-past-header:hover{opacity:0.75;}
+.b-past-toggle{font-size:9px;opacity:0.7;}
+.b-past-items.hidden{display:none;}
 .b-item.in-progress{background:rgba(46,204,113,0.12);border:1px solid rgba(46,204,113,0.3);border-radius:5px;padding:4px 8px;margin:2px -4px;border-top:1px solid rgba(46,204,113,0.3);}
 body.dark .b-item.in-progress{background:rgba(46,204,113,0.15);}
 .b-time{font-size:10px;color:var(--text-secondary);margin-left:2px;}

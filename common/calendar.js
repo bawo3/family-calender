@@ -91,7 +91,7 @@
       // purpose:'any' 만 사용 — 'maskable' 포함 시 Android 런처가 원형 크롭해서 확대 현상 발생
       const mData={
         name:TITLE,
-        short_name:TITLE.replace(/\s+/g,' ').trim().slice(0,15),
+        short_name:TITLE.replace(/(\p{Emoji_Presentation}|\p{Extended_Pictographic})(\u{200D}(\p{Emoji_Presentation}|\p{Extended_Pictographic}))*/gu,'').replace(/\s+/g,' ').trim().slice(0,15),
         start_url:location.pathname+(location.search||''),
         display:'standalone',
         background_color:accent,
@@ -392,6 +392,7 @@
   let selectedStart=null, selectedEnd=null;
   let tapFirst=null; // 1번째 탭 날짜 (null=미선택, string=2번째 탭 대기 중)
   let editingEventId=null; // 수정 중인 일정 ID (null=추가 모드)
+  let _pastEventsCollapsed=true; // 이번달 지난 일정 접힘 상태
 
   // 메모리 캐시 — DB 호출 결과를 보관해서 렌더 함수는 동기적으로 동작
   const cache = { events:[], users:{}, allUsers:{}, notices:[], anniversaries:[] };
@@ -763,19 +764,12 @@
       return;
     }
     anns.forEach(ann=>{
-      const nexts=getAnnivNextOccurrences(ann);
-      const nextMain=nexts.find(n=>n.subtype!=='100days')||nexts[0];
-      const next100=nexts.find(n=>n.subtype==='100days');
+      // 기준일부터 오늘까지 경과 일수 (계속 누적)
+      const elapsed=daysBetween(ann.date, todayStr());
       const icon=ann.type==='birthday'?'🎂':'💕';
       const typeLabel=ann.type==='birthday'?'생일':'기념일';
-
-      const ddayClass=nextMain&&nextMain.dday==='D-Day'?'anniv-dday dday-today':('anniv-dday'+(ann.type==='anniversary'?' type-anniversary':''));
-      const ddayHtml=nextMain?`<span class="${ddayClass}">${nextMain.dday}</span>`:'';
-      const nextHtml=nextMain?`<div class="anniv-next">다음: ${nextMain.dateStr} · ${nextMain.label}</div>`:'';
-      let extra100='';
-      if(next100){
-        extra100=`<div class="anniv-100-info">💫 다음 ${next100.label}: ${next100.dateStr} <span class="anniv-dday anniv-dday-sm type-anniversary">${next100.dday}</span></div>`;
-      }
+      const elapsedClass='anniv-dday'+(ann.type==='anniversary'?' type-anniversary':'');
+      const elapsedHtml=elapsed>=0?`<span class="${elapsedClass}">${elapsed}일째</span>`:'';
 
       const item=document.createElement('div');
       item.className='anniv-item'+(ann.type==='anniversary'?' type-anniversary':'');
@@ -786,11 +780,9 @@
             <div class="anniv-name-row">
               <span class="anniv-name">${ann.name}</span>
               <span class="anniv-type-tag">${typeLabel}</span>
-              ${ddayHtml}
+              ${elapsedHtml}
             </div>
             <div class="anniv-orig-date">📅 ${ann.date} 부터</div>
-            ${nextHtml}
-            ${extra100}
           </div>
         </div>
         <button class="anniv-del-btn">삭제</button>`;
@@ -1405,44 +1397,43 @@
     const today=todayStr();
     const all=loadEvents();
 
-    // 날짜 계산 헬퍼
-    const addDays=(s,n)=>{
-      const [y,m,d]=s.split('-').map(Number);
-      const dt=new Date(y,m-1,d);dt.setDate(dt.getDate()+n);
-      return formatDate(dt.getFullYear(),dt.getMonth(),dt.getDate());
-    };
-    const lastDayOfNextMonth=()=>{
-      const t=new Date();
-      // 다다음달 0일 = 다음달 마지막날
-      const d=new Date(t.getFullYear(),t.getMonth()+2,0);
-      return formatDate(d.getFullYear(),d.getMonth(),d.getDate());
-    };
-    // 다음주 말일(일요일) 계산 — 월~일 한 주 기준
-    const t=new Date();
-    const dow=t.getDay(); // 0=일,1=월,...,6=토
-    const daysToNextWeekEnd=((7-dow)%7)+7; // 이번주 일요일까지 + 7일
-    const nextWeekEnd=addDays(today,daysToNextWeekEnd);
-    const nextMonthEnd=lastDayOfNextMonth();
+    // 현재 보고 있는 달과 실제 이번달 비교
+    const viewY=currentDate.getFullYear(), viewM=currentDate.getMonth();
+    const nowD=new Date();
+    const isCurrentMonth=(viewY===nowD.getFullYear() && viewM===nowD.getMonth());
 
-    // 기념일 가상 이벤트 (오늘 ~ 다음달 말일)
-    const annivBannerEvs=generateAnniversaryVirtualEventsForRange(today, nextMonthEnd);
-    // 전체 = 실제 이벤트 + 기념일 가상 이벤트
+    // 뷰 달의 첫날/마지막날 문자열
+    const viewMonthStart=formatDate(viewY,viewM,1);
+    const viewMonthEnd=formatDate(viewY,viewM,new Date(viewY,viewM+1,0).getDate());
+
+    // 기념일 가상 이벤트 (뷰 달 전체)
+    const annivBannerEvs=generateAnniversaryVirtualEventsForRange(viewMonthStart, viewMonthEnd);
     const allWithAnniv=[...all, ...annivBannerEvs];
 
-    // 현재 진행 중인 모든 일정 (중요/일반 무관 — 오늘이 시작일~종료일에 포함)
+    // 섹션 1: 진행 중인 일정 (항상 표시 — 오늘이 시작일~종료일 사이)
     const inProgressEvs=allWithAnniv
       .filter(ev=>ev.startDate<=today && ev.endDate>=today)
       .sort((a,b)=>a.endDate.localeCompare(b.endDate));
-    // 진행 예정 중요 — 다음달 말일까지 시작 (기념일 포함)
-    const upcomingImportantEvs=allWithAnniv
-      .filter(ev=>ev.important && ev.startDate>today && ev.startDate<=nextMonthEnd)
-      .sort((a,b)=>a.startDate.localeCompare(b.startDate));
-    // 진행 예정 일반 — 다음주 말일(일요일)까지 시작
-    const upcomingNormalEvs=all
-      .filter(ev=>!ev.important && ev.startDate>today && ev.startDate<=nextWeekEnd)
-      .sort((a,b)=>a.startDate.localeCompare(b.startDate));
 
-    if(!inProgressEvs.length && !upcomingImportantEvs.length && !upcomingNormalEvs.length){
+    let upcomingMonthEvs=[], pastMonthEvs=[], otherMonthEvs=[];
+
+    if(isCurrentMonth){
+      // 섹션 2: 이번달 진행 예정 (startDate > today, 이번달 내)
+      upcomingMonthEvs=allWithAnniv
+        .filter(ev=>ev.startDate>today && ev.startDate>=viewMonthStart && ev.startDate<=viewMonthEnd)
+        .sort((a,b)=>a.startDate.localeCompare(b.startDate));
+      // 섹션 3: 이번달 지난 일정 (endDate < today, 이번달 내) — 기념일 가상이벤트 제외
+      pastMonthEvs=all
+        .filter(ev=>ev.endDate<today && ev.endDate>=viewMonthStart && ev.endDate<=viewMonthEnd)
+        .sort((a,b)=>a.startDate.localeCompare(b.startDate));
+    } else {
+      // 다른 달: 해당 월 전체 일정 (날짜 범위가 해당 달과 겹치는 모든 일정)
+      otherMonthEvs=allWithAnniv
+        .filter(ev=>ev.startDate<=viewMonthEnd && ev.endDate>=viewMonthStart)
+        .sort((a,b)=>a.startDate.localeCompare(b.startDate));
+    }
+
+    if(!inProgressEvs.length && !upcomingMonthEvs.length && !pastMonthEvs.length && !otherMonthEvs.length){
       banner.classList.add('hidden');return;
     }
     banner.classList.remove('hidden');list.innerHTML='';
@@ -1477,9 +1468,38 @@
       items.forEach(ev=>list.appendChild(makeItem(ev,isIP)));
       prevSection=true;
     };
+
     addSection('📍 현재 일정 진행중', inProgressEvs, true);
-    addSection('✨ 곧 시작 일정 (~다음주 일요일)', upcomingNormalEvs, false);
-    addSection('📅 진행 예정 주요 일정', upcomingImportantEvs, false);
+
+    if(isCurrentMonth){
+      addSection('✨ 이번달 진행 예정 일정', upcomingMonthEvs, false);
+      // 이번달 지난 일정 — 접힘 상태 유지, 빈 경우 미표시
+      if(pastMonthEvs.length){
+        const gapCls=prevSection?' b-section-gap':'';
+        const headerEl=document.createElement('div');
+        headerEl.className='b-section-title b-past-header'+gapCls;
+        const toggleSpan=document.createElement('span');
+        toggleSpan.className='b-past-toggle';
+        toggleSpan.textContent=_pastEventsCollapsed?'▶':'▼';
+        headerEl.append('📋 이번달 지난 일정 ', toggleSpan);
+        list.appendChild(headerEl);
+
+        const pastWrap=document.createElement('div');
+        pastWrap.className='b-past-items';
+        if(_pastEventsCollapsed) pastWrap.classList.add('hidden');
+        pastMonthEvs.forEach(ev=>pastWrap.appendChild(makeItem(ev,false)));
+        list.appendChild(pastWrap);
+
+        headerEl.addEventListener('click',()=>{
+          _pastEventsCollapsed=!_pastEventsCollapsed;
+          pastWrap.classList.toggle('hidden',_pastEventsCollapsed);
+          toggleSpan.textContent=_pastEventsCollapsed?'▶':'▼';
+        });
+        prevSection=true;
+      }
+    } else {
+      addSection(`📅 ${viewM+1}월 일정`, otherMonthEvs, false);
+    }
   }
 
   function renderCalendar(){
