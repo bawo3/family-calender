@@ -25,16 +25,87 @@
   // 자동 로그인 정보(디바이스 한정)는 localStorage 에 보관
   const KEY_CURRENT = `${PREFIX}_current_user`;
 
+  const darken = h=>{
+    if(!h||!h.startsWith('#')||h.length<7)return h;
+    const r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16);
+    return '#'+[r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v*0.78))).toString(16).padStart(2,'0')).join('');
+  };
   if(cfg.accent){
-    const darken = h=>{
-      if(!h||!h.startsWith('#')||h.length<7)return h;
-      const r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16);
-      return '#'+[r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v*0.78))).toString(16).padStart(2,'0')).join('');
-    };
     document.documentElement.style.setProperty('--accent', cfg.accent);
     document.documentElement.style.setProperty('--accent-dark', cfg.accentDark || darken(cfg.accent));
     document.documentElement.style.setProperty('--help-border', cfg.accent);
   }
+
+  // PWA 홈 화면 아이콘 — Canvas로 동적 생성 (별도 PNG 파일 불필요)
+  // iOS apple-touch-icon + Android Web Manifest 모두 처리
+  function setupPWAIcons(){
+    try{
+      const accent = cfg.accent || '#3498db';
+      // 제목에서 첫 번째 이모지(ZWJ 복합 이모지 포함) 추출
+      const emojiRe=/(\p{Emoji_Presentation}|\p{Extended_Pictographic})(\u{200D}(\p{Emoji_Presentation}|\p{Extended_Pictographic}))*/gu;
+      const emojiMatch=TITLE.match(emojiRe);
+      const emoji=emojiMatch?emojiMatch[0]:'📅';
+
+      // 512×512 캔버스 아이콘 생성
+      const sz=512, r2=sz*0.22;
+      const cv=document.createElement('canvas');cv.width=sz;cv.height=sz;
+      const cx=cv.getContext('2d');
+      // 둥근 사각형 배경 (accent 색)
+      cx.fillStyle=accent;
+      cx.beginPath();
+      cx.moveTo(r2,0);cx.lineTo(sz-r2,0);
+      cx.arcTo(sz,0,sz,r2,r2);cx.lineTo(sz,sz-r2);
+      cx.arcTo(sz,sz,sz-r2,sz,r2);cx.lineTo(r2,sz);
+      cx.arcTo(0,sz,0,sz-r2,r2);cx.lineTo(0,r2);
+      cx.arcTo(0,0,r2,0,r2);cx.closePath();cx.fill();
+      // 흰색 달력 작은 아이콘 (배경)
+      const pad=sz*0.18, cr=sz*0.06;
+      cx.fillStyle='rgba(255,255,255,0.22)';
+      cx.beginPath();
+      cx.moveTo(pad+cr,pad);cx.lineTo(sz-pad-cr,pad);
+      cx.arcTo(sz-pad,pad,sz-pad,pad+cr,cr);cx.lineTo(sz-pad,sz-pad-cr);
+      cx.arcTo(sz-pad,sz-pad,sz-pad-cr,sz-pad,cr);cx.lineTo(pad+cr,sz-pad);
+      cx.arcTo(pad,sz-pad,pad,sz-pad-cr,cr);cx.lineTo(pad,pad+cr);
+      cx.arcTo(pad,pad,pad+cr,pad,cr);cx.closePath();cx.fill();
+      // 이모지
+      cx.font=`${sz*0.5}px serif`;
+      cx.textAlign='center';cx.textBaseline='middle';
+      cx.fillText(emoji,sz/2,sz/2+sz*0.02);
+      const iconUrl=cv.toDataURL('image/png');
+
+      // apple-touch-icon (iOS)
+      let atl=document.querySelector('link[rel="apple-touch-icon"]');
+      if(!atl){atl=document.createElement('link');atl.rel='apple-touch-icon';document.head.appendChild(atl);}
+      atl.href=iconUrl;
+
+      // favicon
+      let fav=document.querySelector('link[rel="icon"]');
+      if(!fav){fav=document.createElement('link');fav.rel='icon';fav.type='image/png';document.head.appendChild(fav);}
+      fav.href=iconUrl;
+
+      // theme-color 메타 동기화
+      let tm=document.querySelector('meta[name="theme-color"]');
+      if(!tm){tm=document.createElement('meta');tm.name='theme-color';document.head.appendChild(tm);}
+      tm.content=accent;
+
+      // Web App Manifest (Android + Chrome 설치 프롬프트)
+      const mData={
+        name:TITLE,
+        short_name:TITLE.replace(/\s+/g,' ').trim().slice(0,15),
+        start_url:location.pathname+(location.search||''),
+        display:'standalone',
+        background_color:accent,
+        theme_color:accent,
+        icons:[{src:iconUrl,sizes:'512x512',type:'image/png',purpose:'any maskable'}]
+      };
+      const mBlob=new Blob([JSON.stringify(mData)],{type:'application/manifest+json'});
+      const mUrl=URL.createObjectURL(mBlob);
+      let ml=document.querySelector('link[rel="manifest"]');
+      if(!ml){ml=document.createElement('link');ml.rel='manifest';document.head.appendChild(ml);}
+      ml.href=mUrl;
+    }catch(e){ console.error('PWA 아이콘 생성 실패:', e); }
+  }
+  setupPWAIcons();
 
   // -----------------------------------------
   // 2) HTML 구조 + 로딩 오버레이 주입
@@ -83,6 +154,7 @@
         <button class="u-btn" id="reloadBtn" title="새로고침">🔄</button>
         <button class="u-btn" id="alarmBtn" title="중요일정 알림 설정">🔕</button>
         <button class="u-btn" id="noticeBtn">📢</button>
+        <button class="u-btn" id="anniversaryBtn" title="기념일/생일 관리">💗</button>
         <button class="u-btn logout-u-btn" id="logoutBtn">로그아웃</button>
       </div>
     </div>
@@ -201,6 +273,33 @@
       <button class="modal-btn primary" id="noticeAddBtn">등록</button>
     </div>
   </div>
+</div>
+
+<div class="modal-overlay hidden" id="anniversaryModal">
+  <div class="modal-box" style="max-width:500px;">
+    <h2>💗 기념일 · 생일 관리</h2>
+    <div class="anniv-list-section" id="anniversaryList"></div>
+    <div class="anniv-add-section">
+      <h3>+ 새로 추가</h3>
+      <div class="anniv-type-row">
+        <label class="anniv-type-btn active" id="annivBirthdayLabel">
+          <input type="radio" name="annivType" value="birthday" id="annivTypeBirthday" checked>🎂 생일
+        </label>
+        <label class="anniv-type-btn" id="annivAnnivLabel">
+          <input type="radio" name="annivType" value="anniversary" id="annivTypeAnniversary">💕 기념일
+        </label>
+      </div>
+      <input type="text" class="anniv-input" id="annivName" placeholder="이름 또는 설명 (예: 혜주, 우리 기념일)" maxlength="30">
+      <input type="date" class="anniv-input" id="annivDate">
+      <label class="anniv-100days-label hidden" id="anniv100dayLabel">
+        <input type="checkbox" id="anniv100days">📅 매 100일마다 캘린더에 표기
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn cancel" id="anniversaryCloseBtn">닫기</button>
+      <button class="modal-btn primary" id="anniversaryAddBtn">추가</button>
+    </div>
+  </div>
 </div>`;
   document.body.insertAdjacentHTML('afterbegin', HTML_TEMPLATE);
 
@@ -230,13 +329,14 @@
   let editingEventId=null; // 수정 중인 일정 ID (null=추가 모드)
 
   // 메모리 캐시 — DB 호출 결과를 보관해서 렌더 함수는 동기적으로 동작
-  const cache = { events:[], users:{}, allUsers:{}, notices:[] };
+  const cache = { events:[], users:{}, allUsers:{}, notices:[], anniversaries:[] };
 
   // localStorage 폴백 모드 (API/KV 미연결 시 자동 전환)
   let localMode = false;
-  const LS_EVENTS  = `${PREFIX}_ls_events`;
-  const LS_USERS   = `${PREFIX}_ls_users`;
-  const LS_NOTICES = `${PREFIX}_ls_notices`;
+  const LS_EVENTS        = `${PREFIX}_ls_events`;
+  const LS_USERS         = `${PREFIX}_ls_users`;
+  const LS_NOTICES       = `${PREFIX}_ls_notices`;
+  const LS_ANNIVERSARIES = `${PREFIX}_ls_anniversaries`;
   function lsGet(key, fallback){
     try{ return JSON.parse(localStorage.getItem(key))??fallback; }catch{ return fallback; }
   }
@@ -267,15 +367,20 @@
   async function refreshNotices(){
     cache.notices = await fetchJSON(`${API}/notices?prefix=${encodeURIComponent(PREFIX)}`);
   }
+  async function refreshAnniversaries(){
+    if(localMode){ cache.anniversaries = lsGet(LS_ANNIVERSARIES, []); return; }
+    cache.anniversaries = await fetchJSON(`${API}/anniversaries?prefix=${encodeURIComponent(PREFIX)}`);
+  }
   async function refreshAll(){
     if(localMode){
-      cache.events  = lsGet(LS_EVENTS,  []);
-      cache.users   = lsGet(LS_USERS,   {});
-      cache.allUsers = cache.users;
-      cache.notices = lsGet(LS_NOTICES, []);
+      cache.events        = lsGet(LS_EVENTS,  []);
+      cache.users         = lsGet(LS_USERS,   {});
+      cache.allUsers      = cache.users;
+      cache.notices       = lsGet(LS_NOTICES, []);
+      cache.anniversaries = lsGet(LS_ANNIVERSARIES, []);
       return;
     }
-    await Promise.all([refreshEvents(), refreshUsers(), refreshNotices()]);
+    await Promise.all([refreshEvents(), refreshUsers(), refreshNotices(), refreshAnniversaries()]);
     cache.allUsers = cache.users; // 같은 캘린더 사용자만 사용
   }
 
@@ -284,6 +389,7 @@
   function loadUsers(){ return cache.users; }
   function loadAllUsers(){ return cache.allUsers; }
   function loadNotices(){ return cache.notices; }
+  function loadAnniversaries(){ return cache.anniversaries || []; }
 
   // API 쓰기 (비동기) — 캐시도 즉시 갱신해서 UI 반응 빠르게
   async function apiAddEvent(ev){
@@ -341,6 +447,24 @@
     }
     await fetchJSON(`${API}/notices?prefix=${encodeURIComponent(PREFIX)}&id=${encodeURIComponent(id)}`,{method:'DELETE'});
     cache.notices = cache.notices.filter(n=>n.id!==id);
+  }
+  async function apiAddAnniversary(item){
+    if(localMode){
+      const arr=lsGet(LS_ANNIVERSARIES,[]); arr.push(item); lsSet(LS_ANNIVERSARIES,arr);
+      cache.anniversaries.push(item); return;
+    }
+    await fetchJSON(`${API}/anniversaries?prefix=${encodeURIComponent(PREFIX)}`,{
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(item)
+    });
+    cache.anniversaries.push(item);
+  }
+  async function apiDeleteAnniversary(id){
+    if(localMode){
+      const arr=lsGet(LS_ANNIVERSARIES,[]).filter(a=>a.id!==id); lsSet(LS_ANNIVERSARIES,arr);
+      cache.anniversaries=cache.anniversaries.filter(a=>a.id!==id); return;
+    }
+    await fetchJSON(`${API}/anniversaries?prefix=${encodeURIComponent(PREFIX)}&id=${encodeURIComponent(id)}`,{method:'DELETE'});
+    cache.anniversaries=cache.anniversaries.filter(a=>a.id!==id);
   }
 
   // -----------------------------------------
@@ -435,6 +559,214 @@
   function rangesOverlap(as,ae,bs,be){return as<=be&&bs<=ae;}
   function daysBetween(a,b){return Math.round((new Date(b)-new Date(a))/86400000);}
   function applySkin(s){ document.body.classList.toggle('dark',s==='dark'); }
+
+  // -----------------------------------------
+  // 기념일 · 생일 가상 이벤트 생성 헬퍼
+  // -----------------------------------------
+
+  // D-day 문자열 반환 ('D-Day' | 'D-3' | 'D+5')
+  function calcDday(targetDateStr){
+    const today=todayStr();
+    if(targetDateStr===today) return 'D-Day';
+    const diff=daysBetween(today,targetDateStr);
+    return diff>0 ? `D-${diff}` : `D+${Math.abs(diff)}`;
+  }
+
+  // 기념일 1건의 다음 발생 목록 반환 (연도별 1건 + 100일 1건)
+  function getAnnivNextOccurrences(ann){
+    const today=todayStr();
+    const [oy,om,od]=ann.date.split('-').map(Number);
+    const cy=new Date().getFullYear();
+    const pad=n=>String(n).padStart(2,'0');
+    const result=[];
+
+    // 연도별 다음 발생 (n >= 1)
+    for(const y of [cy, cy+1]){
+      if(y<=oy) continue;
+      const ds=`${y}-${pad(om)}-${pad(od)}`;
+      if(ds>=today){
+        const n=y-oy;
+        result.push({
+          dateStr:ds, n,
+          label: ann.type==='birthday' ? `${n}번째 생일` : `${n}주년`,
+          dday: calcDday(ds),
+          subtype: ann.type
+        });
+        break;
+      }
+    }
+
+    // 100일 단위 다음 발생 (기념일만)
+    if(ann.type==='anniversary' && ann.show100days){
+      const origMs=new Date(oy,om-1,od).getTime();
+      for(let n=100; n<=36500; n+=100){
+        const d=new Date(origMs+n*86400000);
+        const ds=formatDate(d.getFullYear(),d.getMonth(),d.getDate());
+        if(ds>=today && ds>ann.date){
+          result.push({
+            dateStr:ds, n,
+            label:`${n}일`,
+            dday: calcDday(ds),
+            subtype:'100days'
+          });
+          break;
+        }
+      }
+    }
+
+    return result.sort((a,b)=>a.dateStr.localeCompare(b.dateStr));
+  }
+
+  // 기간 내 기념일 가상 이벤트 배열 생성
+  function generateAnniversaryVirtualEventsForRange(startStr, endStr){
+    const result=[];
+    const anns=loadAnniversaries();
+    if(!anns.length) return result;
+    const [sy]=startStr.split('-').map(Number);
+    const [ey]=endStr.split('-').map(Number);
+    const pad=n=>String(n).padStart(2,'0');
+
+    for(const ann of anns){
+      if(!ann.date) continue;
+      const [oy,om,od]=ann.date.split('-').map(Number);
+      const color=ann.type==='birthday'?'#e84393':'#e74c3c';
+      const userBadge=ann.type==='birthday'?'🎂':'💕';
+
+      // 연도별 이벤트 (탄생/원년 제외 n >= 1)
+      for(let y=Math.max(sy,oy+1); y<=ey; y++){
+        const ds=`${y}-${pad(om)}-${pad(od)}`;
+        if(ds>=startStr && ds<=endStr){
+          const n=y-oy;
+          result.push({
+            isAnniversary:true,
+            anniversaryId:ann.id,
+            anniversaryType:ann.type,
+            text: ann.type==='birthday' ? `🎂 ${ann.name} (${n}번째 생일)` : `💕 ${ann.name} (${n}주년)`,
+            startDate:ds, endDate:ds, from:'', to:'',
+            color, user:userBadge, important:true
+          });
+        }
+      }
+
+      // 100일 단위 이벤트 (기념일만)
+      if(ann.type==='anniversary' && ann.show100days){
+        const origMs=new Date(oy,om-1,od).getTime();
+        for(let n=100; n<=36500; n+=100){
+          const d=new Date(origMs+n*86400000);
+          const ds=formatDate(d.getFullYear(),d.getMonth(),d.getDate());
+          if(ds>endStr) break;
+          if(ds>=startStr && ds>ann.date){
+            result.push({
+              isAnniversary:true,
+              anniversaryId:ann.id,
+              anniversaryType:'anniversary-100',
+              text:`💕 ${ann.name} (${n}일)`,
+              startDate:ds, endDate:ds, from:'', to:'',
+              color:'#e74c3c', user:'💕', important:true
+            });
+          }
+        }
+      }
+    }
+    return result;
+  }
+
+  // -----------------------------------------
+  // 기념일 모달 UI
+  // -----------------------------------------
+  function openAnniversaryModal(){
+    renderAnniversaryList();
+    document.getElementById('anniversaryModal').classList.remove('hidden');
+  }
+  function closeAnniversaryModal(){
+    document.getElementById('anniversaryModal').classList.add('hidden');
+    document.getElementById('annivName').value='';
+    document.getElementById('annivDate').value='';
+    document.getElementById('anniv100days').checked=false;
+    // 타입 초기화
+    document.getElementById('annivTypeBirthday').checked=true;
+    document.getElementById('annivBirthdayLabel').classList.add('active');
+    document.getElementById('annivAnnivLabel').classList.remove('active');
+    document.getElementById('anniv100dayLabel').classList.add('hidden');
+  }
+  function renderAnniversaryList(){
+    const el=document.getElementById('anniversaryList');
+    el.innerHTML='';
+    const anns=loadAnniversaries();
+    if(!anns.length){
+      el.innerHTML='<p style="color:var(--empty-msg);font-size:13px;padding:8px 0">등록된 기념일이 없습니다.</p>';
+      return;
+    }
+    anns.forEach(ann=>{
+      const nexts=getAnnivNextOccurrences(ann);
+      const nextMain=nexts.find(n=>n.subtype!=='100days')||nexts[0];
+      const next100=nexts.find(n=>n.subtype==='100days');
+      const icon=ann.type==='birthday'?'🎂':'💕';
+      const typeLabel=ann.type==='birthday'?'생일':'기념일';
+
+      const ddayClass=nextMain&&nextMain.dday==='D-Day'?'anniv-dday dday-today':('anniv-dday'+(ann.type==='anniversary'?' type-anniversary':''));
+      const ddayHtml=nextMain?`<span class="${ddayClass}">${nextMain.dday}</span>`:'';
+      const nextHtml=nextMain?`<div class="anniv-next">다음: ${nextMain.dateStr} · ${nextMain.label}</div>`:'';
+      let extra100='';
+      if(next100){
+        extra100=`<div class="anniv-100-info">💫 다음 ${next100.label}: ${next100.dateStr} <span class="anniv-dday anniv-dday-sm type-anniversary">${next100.dday}</span></div>`;
+      }
+
+      const item=document.createElement('div');
+      item.className='anniv-item'+(ann.type==='anniversary'?' type-anniversary':'');
+      item.innerHTML=`
+        <div class="anniv-row-left">
+          <span class="anniv-icon-lbl">${icon}</span>
+          <div class="anniv-info">
+            <div class="anniv-name-row">
+              <span class="anniv-name">${ann.name}</span>
+              <span class="anniv-type-tag">${typeLabel}</span>
+              ${ddayHtml}
+            </div>
+            <div class="anniv-orig-date">📅 ${ann.date} 부터</div>
+            ${nextHtml}
+            ${extra100}
+          </div>
+        </div>
+        <button class="anniv-del-btn">삭제</button>`;
+      item.querySelector('.anniv-del-btn').addEventListener('click',()=>deleteAnniversary(ann.id));
+      el.appendChild(item);
+    });
+  }
+  async function addAnniversary(){
+    const type=document.querySelector('input[name="annivType"]:checked')?.value||'birthday';
+    const name=document.getElementById('annivName').value.trim();
+    const date=document.getElementById('annivDate').value;
+    const show100days=type==='anniversary'&&document.getElementById('anniv100days').checked;
+    if(!name||!date){ alert('이름과 날짜를 모두 입력하세요.'); return; }
+    const btn=document.getElementById('anniversaryAddBtn');
+    btn.disabled=true;
+    try{
+      const item={id:makeId(),type,name,date,show100days,createdBy:currentUser};
+      await apiAddAnniversary(item);
+      document.getElementById('annivName').value='';
+      document.getElementById('annivDate').value='';
+      document.getElementById('anniv100days').checked=false;
+      renderAnniversaryList();
+      renderCalendar();
+      renderEventList();
+    }catch(e){
+      alert('추가 실패: '+e.message);
+    }finally{
+      btn.disabled=false;
+    }
+  }
+  async function deleteAnniversary(id){
+    if(!confirm('이 기념일을 삭제하면 캘린더의 모든 표기가 사라집니다.\n삭제하시겠습니까?')) return;
+    try{
+      await apiDeleteAnniversary(id);
+      renderAnniversaryList();
+      renderCalendar();
+      renderEventList();
+    }catch(e){
+      alert('삭제 실패: '+e.message);
+    }
+  }
 
   // -----------------------------------------
   // 6) 로그인 화면 UI
@@ -1026,12 +1358,17 @@
     const nextWeekEnd=addDays(today,daysToNextWeekEnd);
     const nextMonthEnd=lastDayOfNextMonth();
 
+    // 기념일 가상 이벤트 (오늘 ~ 다음달 말일)
+    const annivBannerEvs=generateAnniversaryVirtualEventsForRange(today, nextMonthEnd);
+    // 전체 = 실제 이벤트 + 기념일 가상 이벤트
+    const allWithAnniv=[...all, ...annivBannerEvs];
+
     // 현재 진행 중인 모든 일정 (중요/일반 무관 — 오늘이 시작일~종료일에 포함)
-    const inProgressEvs=all
+    const inProgressEvs=allWithAnniv
       .filter(ev=>ev.startDate<=today && ev.endDate>=today)
       .sort((a,b)=>a.endDate.localeCompare(b.endDate));
-    // 진행 예정 중요 — 다음달 말일까지 시작
-    const upcomingImportantEvs=all
+    // 진행 예정 중요 — 다음달 말일까지 시작 (기념일 포함)
+    const upcomingImportantEvs=allWithAnniv
       .filter(ev=>ev.important && ev.startDate>today && ev.startDate<=nextMonthEnd)
       .sort((a,b)=>a.startDate.localeCompare(b.startDate));
     // 진행 예정 일반 — 다음주 말일(일요일)까지 시작
@@ -1047,14 +1384,23 @@
     const makeItem=(ev,isIP)=>{
       const item=document.createElement('div');item.className='b-item'+(isIP?' in-progress':'');
       const badge=document.createElement('span');badge.className='b-user-badge';
-      badge.style.background=ev.color||'#95a5a6';badge.textContent=ev.user;
+      badge.style.background=ev.color||'#95a5a6';badge.textContent=ev.user||'';
       const ts=formatTimeRange(ev.from,ev.to);
       const text=document.createElement('span');
-      text.textContent=(ev.important?'⭐ ':'')+ev.text;
+      text.textContent=(ev.important&&!ev.isAnniversary?'⭐ ':'')+ev.text;
       const range=document.createElement('span');range.className='b-range'+(isIP?' b-range-ip':'');
       range.textContent=ev.startDate===ev.endDate?ev.startDate:`${ev.startDate}~${ev.endDate}`;
       item.appendChild(badge);item.appendChild(text);item.appendChild(range);
       if(ts){const tb=document.createElement('span');tb.className='b-time';tb.textContent=`⏰ ${ts}`;item.appendChild(tb);}
+      // 기념일 이벤트에는 D-day 뱃지 추가
+      if(ev.isAnniversary){
+        const dd=document.createElement('span');
+        const ddLabel=calcDday(ev.startDate);
+        dd.className='anniv-dday anniv-dday-sm'+(ev.anniversaryType==='birthday'?'':' type-anniversary')+(ddLabel==='D-Day'?' dday-today':'');
+        dd.textContent=ddLabel;
+        dd.style.marginLeft='4px';
+        item.appendChild(dd);
+      }
       return item;
     };
     let prevSection=false;
@@ -1101,13 +1447,15 @@
         cell.appendChild(hl);
       }
 
-      const dayEvs=events.filter(ev=>dateInRange(dateStr,ev.startDate,ev.endDate));
+      // 일반 이벤트 + 기념일 가상 이벤트 합산
+      const annivDayEvs=generateAnniversaryVirtualEventsForRange(dateStr,dateStr);
+      const dayEvs=[...events.filter(ev=>dateInRange(dateStr,ev.startDate,ev.endDate)), ...annivDayEvs];
       const seen=new Set();
       const deduped=dayEvs.filter(ev=>{
         const k=`${ev.startDate}|${ev.endDate}|${ev.text}`;
         if(seen.has(k))return false;seen.add(k);return true;
       });
-      deduped.slice(0,2).forEach(ev=>{
+      deduped.slice(0,3).forEach(ev=>{
         const isMulti=ev.startDate!==ev.endDate;
         let barClass;
         if(!isMulti){barClass='bar-single';}
@@ -1120,18 +1468,21 @@
           else barClass='bar-mid';
         }
         const bar=document.createElement('div');
-        bar.className=`event-bar ${barClass}`;
+        bar.className=`event-bar ${barClass}${ev.isAnniversary?' anniv-bar':''}`;
         bar.style.background=ev.color||'#95a5a6';
         if(barClass==='bar-single'||barClass==='bar-start'||barClass==='bar-span'){
           const ts=formatTimeRange(ev.from,ev.to);
-          bar.innerHTML=`${ev.important?'⭐ ':''}${ev.user}: ${ev.text}${ts?` <span style="font-size:10px;opacity:0.75"> ${ts}</span>`:''}`;
-
+          if(ev.isAnniversary){
+            bar.textContent=ev.text; // 기념일은 텍스트만 표시 (user 접두사 없음)
+          } else {
+            bar.innerHTML=`${ev.important?'⭐ ':''}${ev.user}: ${ev.text}${ts?` <span style="font-size:10px;opacity:0.75"> ${ts}</span>`:''}`;
+          }
         }
         cell.appendChild(bar);
       });
-      if(deduped.length>2){
+      if(deduped.length>3){
         const more=document.createElement('div');more.className='event-bar bar-single';
-        more.style.background='#95a5a6';more.textContent=`+${deduped.length-2}개 더`;cell.appendChild(more);
+        more.style.background='#95a5a6';more.textContent=`+${deduped.length-3}개 더`;cell.appendChild(more);
       }
       cell.addEventListener('click',(e)=>{
         e.stopPropagation();
@@ -1184,8 +1535,9 @@
       const [y,m,d]=s.split('-').map(Number);
       return `${s} (${WEEKDAYS[new Date(y,m-1,d).getDay()]})`;
     };
-    // 사용자 일정 매칭
+    // 사용자 일정 + 기념일 가상 이벤트 매칭
     const matched=events.filter(ev=>rangesOverlap(ev.startDate,ev.endDate,selectedStart,selectedEnd));
+    const annivMatched=generateAnniversaryVirtualEventsForRange(selectedStart,selectedEnd);
     // 선택 기간 내 공휴일 수집 (가상 항목으로 리스트에 표시 — 삭제 불가)
     const [sy,sm,sd]=selectedStart.split('-').map(Number);
     const [ey,em,ed]=selectedEnd.split('-').map(Number);
@@ -1196,8 +1548,8 @@
       const name=getHoliday(ds);
       if(name) holidayItems.push({isHoliday:true, startDate:ds, endDate:ds, text:name, from:0, to:0});
     }
-    // 통합 정렬 — 날짜순, 같은 날이면 공휴일 먼저, 그 다음 시간순
-    const allItems=[...holidayItems, ...matched].sort((a,b)=>{
+    // 통합 정렬 — 날짜순, 같은 날이면 공휴일→기념일→일반 순, 그 다음 시간순
+    const allItems=[...holidayItems, ...annivMatched, ...matched].sort((a,b)=>{
       if(a.startDate!==b.startDate)return a.startDate.localeCompare(b.startDate);
       if(!!a.isHoliday !== !!b.isHoliday) return a.isHoliday ? -1 : 1;
       return hourOf(a.from)-hourOf(b.from);
@@ -1227,6 +1579,29 @@
         tx.textContent=ev.text;tx.style.color='#e74c3c';tx.style.fontWeight='600';
         content.appendChild(tx);
         li.appendChild(content);list.appendChild(li);
+        return;
+      }
+
+      if(ev.isAnniversary){
+        // 기념일/생일 항목 — 삭제·수정 불가, 잠금 아이콘
+        const isBirthday=ev.anniversaryType==='birthday';
+        li.style.borderLeftColor=ev.color||'#e84393';
+        li.classList.add('anniv-list-item');
+        if(!isBirthday) li.classList.add('type-anniversary');
+        const badgeSpan=document.createElement('span');
+        badgeSpan.className='anniv-event-badge'+(isBirthday?'':' type-anniversary');
+        badgeSpan.textContent=isBirthday?'🎂생일':'💕기념일';
+        content.appendChild(badgeSpan);
+        const ddayLabel=calcDday(ev.startDate);
+        const ddaySpan=document.createElement('span');
+        ddaySpan.className='anniv-dday'+(ddayLabel==='D-Day'?' dday-today':'')+(isBirthday?'':' type-anniversary');
+        ddaySpan.textContent=ddayLabel;
+        content.appendChild(ddaySpan);
+        const tx=document.createElement('span');tx.className='event-text';
+        tx.textContent=ev.text;content.appendChild(tx);
+        // 잠금 아이콘 (삭제 불가 표시)
+        const lock=document.createElement('span');lock.className='anniv-lock-icon';lock.textContent='🔒';lock.title='기념일 관리에서 삭제 가능';
+        li.appendChild(content);li.appendChild(lock);list.appendChild(li);
         return;
       }
 
@@ -1576,6 +1951,32 @@
   document.getElementById('noticeBtn').addEventListener('click',openNoticeModal);
   document.getElementById('noticeCloseBtn').addEventListener('click',closeNoticeModal);
   document.getElementById('noticeAddBtn').addEventListener('click',addNotice);
+  document.getElementById('anniversaryBtn').addEventListener('click',openAnniversaryModal);
+  document.getElementById('anniversaryCloseBtn').addEventListener('click',closeAnniversaryModal);
+  document.getElementById('anniversaryAddBtn').addEventListener('click',addAnniversary);
+  document.getElementById('anniversaryModal').addEventListener('click',e=>{
+    if(e.target===document.getElementById('anniversaryModal')) closeAnniversaryModal();
+  });
+  // 기념일 타입 라디오 토글 — 100일 체크박스 표시 여부
+  document.getElementById('annivTypeBirthday').addEventListener('change',()=>{
+    document.getElementById('annivBirthdayLabel').classList.add('active');
+    document.getElementById('annivAnnivLabel').classList.remove('active');
+    document.getElementById('anniv100dayLabel').classList.add('hidden');
+  });
+  document.getElementById('annivTypeAnniversary').addEventListener('change',()=>{
+    document.getElementById('annivAnnivLabel').classList.add('active');
+    document.getElementById('annivBirthdayLabel').classList.remove('active');
+    document.getElementById('anniv100dayLabel').classList.remove('hidden');
+  });
+  // 레이블 클릭으로도 라디오 선택 가능하게
+  document.getElementById('annivBirthdayLabel').addEventListener('click',()=>{
+    document.getElementById('annivTypeBirthday').checked=true;
+    document.getElementById('annivTypeBirthday').dispatchEvent(new Event('change'));
+  });
+  document.getElementById('annivAnnivLabel').addEventListener('click',()=>{
+    document.getElementById('annivTypeAnniversary').checked=true;
+    document.getElementById('annivTypeAnniversary').dispatchEvent(new Event('change'));
+  });
   // 수정 모드 날짜 직접 입력 핸들러
   document.getElementById('editStartDate').addEventListener('change',e=>{
     selectedStart=e.target.value;
