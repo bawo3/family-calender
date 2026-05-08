@@ -1,3 +1,39 @@
+// 정적 자원 캐시 목록
+const CACHE = 'cal-v1';
+const PRECACHE = ['/common/calendar.css', '/common/calendar.js'];
+
+// 설치 시 정적 자원 캐시
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE)));
+  self.skipWaiting();
+});
+
+// 활성화 시 이전 캐시 제거
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+    )
+  );
+  self.clients.claim();
+});
+
+// 네트워크 요청 가로채기 — API는 항상 네트워크, 나머지는 캐시 우선
+self.addEventListener('fetch', e => {
+  if (e.request.url.includes('/api/')) return;
+  e.respondWith(
+    caches.match(e.request).then(cached => {
+      if (cached) return cached;
+      return fetch(e.request).then(res => {
+        if (res && res.status === 200 && res.type === 'basic') {
+          caches.open(CACHE).then(c => c.put(e.request, res.clone()));
+        }
+        return res;
+      });
+    })
+  );
+});
+
 // 백그라운드 푸시 알림 처리 (페이지 닫혀있어도 동작)
 self.addEventListener('push', event => {
   let data = {};

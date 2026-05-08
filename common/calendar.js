@@ -122,6 +122,11 @@
   }
   setupPWAIcons();
 
+  // PWA 설치 조건 충족을 위해 서비스 워커 먼저 등록 (푸시 알림과 무관하게)
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('/sw.js').catch(e=>console.error('SW 등록 실패:',e));
+  }
+
   // -----------------------------------------
   // PWA 설치 유도 (하단 바)
   // -----------------------------------------
@@ -799,12 +804,13 @@
         if(!ds) continue;
         if(ds>=startStr && ds<=endStr){
           const n=y-oy;
-          const lunarSuffix=ann.isLunar?' 🌙':'';
+          // 음력 생일: "n번째 생일 · 음력 YYYY-MM-DD" 형식으로 표기
+          const lunarLabel=ann.isLunar ? ` · 음력${y}-${pad(om)}-${pad(od)}` : '';
           result.push({
             isAnniversary:true,
             anniversaryId:ann.id,
             anniversaryType:ann.type,
-            text: ann.type==='birthday' ? `🎂 ${ann.name} (${n}번째 생일${lunarSuffix})` : `💕 ${ann.name} (${n}주년${lunarSuffix})`,
+            text: ann.type==='birthday' ? `🎂 ${ann.name} (${n}번째 생일${lunarLabel})` : `💕 ${ann.name} (${n}주년)`,
             startDate:ds, endDate:ds, from:'', to:'',
             color, user:userBadge, important:true
           });
