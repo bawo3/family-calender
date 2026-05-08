@@ -662,6 +662,9 @@
   function rangesOverlap(as,ae,bs,be){return as<=be&&bs<=ae;}
   function daysBetween(a,b){return Math.round((new Date(b)-new Date(a))/86400000);}
   function applySkin(s){ document.body.classList.toggle('dark',s==='dark'); }
+  // MM/DD(요일) 형식 변환
+  const _WD=['일','월','화','수','목','금','토'];
+  function fmtMD(s){const [y,m,d]=s.split('-').map(Number);return `${String(m).padStart(2,'0')}/${String(d).padStart(2,'0')}(${_WD[new Date(y,m-1,d).getDay()]})`;}
 
   // 음력 변환 — Intl.DateTimeFormat 'ca-chinese' 활용 (별도 라이브러리 불필요)
   let _lunarFmt=null;
@@ -1620,7 +1623,13 @@
       const text=document.createElement('span');
       text.textContent=(ev.important&&!ev.isAnniversary?'⭐ ':'')+ev.text;
       const range=document.createElement('span');range.className='b-range'+(isIP?' b-range-ip':'');
-      range.textContent=ev.startDate===ev.endDate?ev.startDate:`${ev.startDate}~${ev.endDate}`;
+      if(ev.startDate===ev.endDate){
+        range.textContent=fmtMD(ev.startDate);
+      }else{
+        // n일간: 시작~종료 날짜 포함 일수
+        const nDays=daysBetween(ev.startDate,ev.endDate)+1;
+        range.textContent=`${fmtMD(ev.startDate)}~${fmtMD(ev.endDate)} (${nDays}일간)`;
+      }
       item.appendChild(badge);item.appendChild(text);item.appendChild(range);
       if(ts){const tb=document.createElement('span');tb.className='b-time';tb.textContent=`⏰ ${ts}`;item.appendChild(tb);}
       // 기념일 이벤트에는 D-day 뱃지 추가
