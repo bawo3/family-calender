@@ -374,7 +374,7 @@
       <input type="text" class="anniv-input" id="annivName" placeholder="이름 또는 설명 (예: 혜주, 우리 기념일)" maxlength="30">
       <input type="date" class="anniv-input" id="annivDate">
       <label class="anniv-check-label" id="annivLunarLabel">
-        <input type="checkbox" id="annivLunar">🌙 음력으로 등록 (매년 음력 기준 표기)
+        <input type="checkbox" id="annivLunar">🌙 음력날짜 같이 표시
       </label>
       <label class="anniv-check-label hidden" id="anniv100dayLabel">
         <input type="checkbox" id="anniv100days">📅 매 100일마다 캘린더에 표기
@@ -722,10 +722,10 @@
     const [oy,om,od]=ann.date.split('-').map(Number);
     const cy=new Date().getFullYear();
     const pad=n=>String(n).padStart(2,'0');
-    for(const y of [cy,cy+1,cy+2]){
-      if(!ann.isLunar && y<=oy) continue;
-      const ds=ann.isLunar ? lunarToSolar(y,om,od) : `${y}-${pad(om)}-${pad(od)}`;
-      if(ds && ds>=today) return ds;
+    for(const y of [cy,cy+1]){
+      if(y<=oy) continue;
+      const ds=`${y}-${pad(om)}-${pad(od)}`;
+      if(ds>=today) return ds;
     }
     return null;
   }
@@ -798,14 +798,18 @@
       const color=ann.type==='birthday'?'#e84393':'#e74c3c';
       const userBadge=ann.type==='birthday'?'🎂':'💕';
 
-      // 연도별 이벤트 (탄생/원년 제외 n >= 1)
+      // 음력 표시 체크 시: 양력 원본 생일의 음력 날짜를 한 번만 계산
+      const lunarOfBirth=(ann.isLunar && ann.type==='birthday') ? solarToLunar(ann.date) : null;
+
+      // 연도별 이벤트 — 항상 입력된 양력 날짜 기준 (n >= 1)
       for(let y=Math.max(sy,oy+1); y<=ey; y++){
-        const ds=ann.isLunar ? lunarToSolar(y,om,od) : `${y}-${pad(om)}-${pad(od)}`;
-        if(!ds) continue;
+        const ds=`${y}-${pad(om)}-${pad(od)}`; // 무조건 양력 날짜
         if(ds>=startStr && ds<=endStr){
           const n=y-oy;
-          // 음력 생일: "n번째 생일 · 음력 YYYY-MM-DD" 형식으로 표기
-          const lunarLabel=ann.isLunar ? ` · 음력${y}-${pad(om)}-${pad(od)}` : '';
+          // 음력 표시 체크 시: (음력 MM-DD) 형식 추가
+          const lunarLabel=lunarOfBirth
+            ? ` (음력 ${String(lunarOfBirth.month).padStart(2,'0')}-${String(lunarOfBirth.day).padStart(2,'0')})`
+            : '';
           result.push({
             isAnniversary:true,
             anniversaryId:ann.id,
@@ -912,18 +916,11 @@
         ddayHtml=`<span class="${ddCls}">${ddLabel}</span>`;
       }
 
-      // 음력 날짜 표시 (생일인 경우, 양력→음력 변환)
+      // 음력 날짜 표시 — 항상 양력 생일의 음력 변환값 표시 (isLunar 체크 시에만)
       let lunarHtml='';
-      if(ann.type==='birthday'){
-        // 음력 등록이면 ann.date가 음력 날짜 → 그대로 표시
-        // 양력 등록이면 solarToLunar로 음력 변환해서 표시
-        if(ann.isLunar){
-          const [,m,d]=ann.date.split('-').map(Number);
-          lunarHtml=`<span class="anniv-lunar-badge">🌙 음력 ${m}월 ${d}일</span>`;
-        } else {
-          const lunar=solarToLunar(ann.date);
-          if(lunar) lunarHtml=`<span class="anniv-lunar-badge">🌙 음력 ${lunar.month}월 ${lunar.day}일${lunar.leap?' (윤달)':''}</span>`;
-        }
+      if(ann.type==='birthday' && ann.isLunar){
+        const lunar=solarToLunar(ann.date);
+        if(lunar) lunarHtml=`<span class="anniv-lunar-badge">🌙 음력 ${lunar.month}월 ${lunar.day}일${lunar.leap?' (윤달)':''}</span>`;
       }
 
       const item=document.createElement('div');
