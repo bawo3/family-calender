@@ -798,26 +798,37 @@
       const color=ann.type==='birthday'?'#e84393':'#e74c3c';
       const userBadge=ann.type==='birthday'?'🎂':'💕';
 
-      // 음력 표시 체크 시: 양력 원본 생일의 음력 날짜를 한 번만 계산
+      // 음력 체크 시: 양력→음력 변환 (1번만 계산)
       const lunarOfBirth=(ann.isLunar && ann.type==='birthday') ? solarToLunar(ann.date) : null;
 
-      // 연도별 이벤트 — 항상 입력된 양력 날짜 기준 (n >= 1)
+      // 연도별 이벤트 (n >= 1)
       for(let y=Math.max(sy,oy+1); y<=ey; y++){
-        const ds=`${y}-${pad(om)}-${pad(od)}`; // 무조건 양력 날짜
-        if(ds>=startStr && ds<=endStr){
-          const n=y-oy;
-          // 음력 표시 체크 시: (음력 MM-DD) 형식 추가
-          const lunarLabel=lunarOfBirth
-            ? ` (음력 ${String(lunarOfBirth.month).padStart(2,'0')}-${String(lunarOfBirth.day).padStart(2,'0')})`
-            : '';
+        const n=y-oy;
+
+        // ① 양력 이벤트 — 항상 표시
+        const dsSolar=`${y}-${pad(om)}-${pad(od)}`;
+        if(dsSolar>=startStr && dsSolar<=endStr){
+          // 음력 체크 시 "(양력)" 구분 레이블 붙임
+          const solarLabel=ann.isLunar?' (양력)':'';
           result.push({
-            isAnniversary:true,
-            anniversaryId:ann.id,
-            anniversaryType:ann.type,
-            text: ann.type==='birthday' ? `🎂 ${ann.name} (${n}번째 생일${lunarLabel})` : `💕 ${ann.name} (${n}주년)`,
-            startDate:ds, endDate:ds, from:'', to:'',
+            isAnniversary:true, anniversaryId:ann.id, anniversaryType:ann.type,
+            text: ann.type==='birthday' ? `🎂 ${ann.name} (${n}번째 생일${solarLabel})` : `💕 ${ann.name} (${n}주년)`,
+            startDate:dsSolar, endDate:dsSolar, from:'', to:'',
             color, user:userBadge, important:true
           });
+        }
+
+        // ② 음력 이벤트 — 음력 체크 시 추가 표시 (음력 날짜→양력 변환 날짜에 표기)
+        if(lunarOfBirth){
+          const dsLunar=lunarToSolar(y, lunarOfBirth.month, lunarOfBirth.day);
+          if(dsLunar && dsLunar>=startStr && dsLunar<=endStr && dsLunar!==dsSolar){
+            result.push({
+              isAnniversary:true, anniversaryId:ann.id, anniversaryType:ann.type,
+              text:`🎂 ${ann.name} (${n}번째 생일 (음력))`,
+              startDate:dsLunar, endDate:dsLunar, from:'', to:'',
+              color, user:userBadge, important:true
+            });
+          }
         }
       }
 
