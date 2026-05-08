@@ -41,10 +41,22 @@
   function setupPWAIcons(){
     try{
       const accent = cfg.accent || '#3498db';
-      // 제목에서 첫 번째 이모지(ZWJ 복합 이모지 포함) 추출
-      const emojiRe=/(\p{Emoji_Presentation}|\p{Extended_Pictographic})(\u{200D}(\p{Emoji_Presentation}|\p{Extended_Pictographic}))*/gu;
-      const emojiMatch=TITLE.match(emojiRe);
-      const emoji=emojiMatch?emojiMatch[0]:'📅';
+      // 제목에서 첫 번째 이모지 추출 — Intl.Segmenter로 ZWJ+variation-selector 완전 지원
+      let emoji='📅';
+      try{
+        if(typeof Intl.Segmenter==='function'){
+          const seg=new Intl.Segmenter('ko',{granularity:'grapheme'});
+          for(const {segment} of seg.segment(TITLE)){
+            const cp=segment.codePointAt(0)||0;
+            if(cp>0x2000){ emoji=segment; break; }
+          }
+        } else {
+          // 폴백: variation selector(FE0F) 포함 ZWJ 정규식
+          const re=/(\p{Emoji_Presentation}|\p{Extended_Pictographic})️?(\u{200D}(\p{Emoji_Presentation}|\p{Extended_Pictographic})️?)*/gu;
+          const m=TITLE.match(re);
+          if(m) emoji=m[0];
+        }
+      }catch(e){}
 
       // sz 크기의 아이콘 캔버스 생성 (재사용 헬퍼)
       function makeIconCanvas(sz){
@@ -345,7 +357,7 @@
     <h2>💗 기념일 · 생일 관리</h2>
     <div class="anniv-list-section" id="anniversaryList"></div>
     <div class="anniv-add-section">
-      <h3>+ 새로 추가</h3>
+      <h3 id="annivFormTitle">+ 새로 추가</h3>
       <div class="anniv-type-row">
         <label class="anniv-type-btn active" id="annivBirthdayLabel">
           <input type="radio" name="annivType" value="birthday" id="annivTypeBirthday" checked>🎂 생일
@@ -356,12 +368,16 @@
       </div>
       <input type="text" class="anniv-input" id="annivName" placeholder="이름 또는 설명 (예: 혜주, 우리 기념일)" maxlength="30">
       <input type="date" class="anniv-input" id="annivDate">
-      <label class="anniv-100days-label hidden" id="anniv100dayLabel">
+      <label class="anniv-check-label" id="annivLunarLabel">
+        <input type="checkbox" id="annivLunar">🌙 음력으로 등록 (매년 음력 기준 표기)
+      </label>
+      <label class="anniv-check-label hidden" id="anniv100dayLabel">
         <input type="checkbox" id="anniv100days">📅 매 100일마다 캘린더에 표기
       </label>
     </div>
     <div class="modal-actions">
       <button class="modal-btn cancel" id="anniversaryCloseBtn">닫기</button>
+      <button class="modal-btn cancel hidden" id="anniversaryCancelEditBtn">수정 취소</button>
       <button class="modal-btn primary" id="anniversaryAddBtn">추가</button>
     </div>
   </div>
@@ -393,6 +409,7 @@
   let tapFirst=null; // 1번째 탭 날짜 (null=미선택, string=2번째 탭 대기 중)
   let editingEventId=null; // 수정 중인 일정 ID (null=추가 모드)
   let _pastEventsCollapsed=true; // 이번달 지난 일정 접힘 상태
+  let editingAnnivId=null; // 수정 중인 기념일 ID (null=추가 모드)
 
   // 메모리 캐시 — DB 호출 결과를 보관해서 렌더 함수는 동기적으로 동작
   const cache = { events:[], users:{}, allUsers:{}, notices:[], anniversaries:[] };
@@ -532,6 +549,21 @@
     await fetchJSON(`${API}/anniversaries?prefix=${encodeURIComponent(PREFIX)}&id=${encodeURIComponent(id)}`,{method:'DELETE'});
     cache.anniversaries=cache.anniversaries.filter(a=>a.id!==id);
   }
+  async function apiUpdateAnniversary(id, data){
+    if(localMode){
+      const arr=lsGet(LS_ANNIVERSARIES,[]);
+      const i=arr.findIndex(a=>a.id===id);
+      if(i!==-1){arr[i]={...arr[i],...data,id};lsSet(LS_ANNIVERSARIES,arr);}
+      const ci=cache.anniversaries.findIndex(a=>a.id===id);
+      if(ci!==-1) cache.anniversaries[ci]={...cache.anniversaries[ci],...data,id};
+      return;
+    }
+    await fetchJSON(`${API}/anniversaries?prefix=${encodeURIComponent(PREFIX)}&id=${encodeURIComponent(id)}`,{
+      method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)
+    });
+    const ci=cache.anniversaries.findIndex(a=>a.id===id);
+    if(ci!==-1) cache.anniversaries[ci]={...cache.anniversaries[ci],...data,id};
+  }
 
   // -----------------------------------------
   // 5) 포맷 / 유틸
@@ -626,9 +658,72 @@
   function daysBetween(a,b){return Math.round((new Date(b)-new Date(a))/86400000);}
   function applySkin(s){ document.body.classList.toggle('dark',s==='dark'); }
 
+  // 음력 변환 — Intl.DateTimeFormat 'ca-chinese' 활용 (별도 라이브러리 불필요)
+  let _lunarFmt=null;
+  function _getLunarFmt(){
+    if(_lunarFmt===false) return null;
+    if(!_lunarFmt){
+      try{ _lunarFmt=new Intl.DateTimeFormat('ko-KR-u-ca-chinese',{month:'numeric',day:'numeric'}); }
+      catch(e){ _lunarFmt=false; return null; }
+    }
+    return _lunarFmt;
+  }
+  const _l2sCache={};
+  // 양력 날짜 문자열(YYYY-MM-DD) → 음력 {month, day, leap}
+  function solarToLunar(solarDateStr){
+    const fmt=_getLunarFmt(); if(!fmt) return null;
+    try{
+      const parts=fmt.formatToParts(new Date(solarDateStr+'T12:00:00'));
+      const mp=parts.find(p=>p.type==='month')?.value||'';
+      const dp=parts.find(p=>p.type==='day')?.value||'';
+      const isLeap=mp.includes('윤');
+      const lm=parseInt(mp.match(/\d+/)?.[0]||'0');
+      const ld=parseInt(dp.match(/\d+/)?.[0]||'0');
+      return (lm&&ld)?{month:lm,day:ld,leap:isLeap}:null;
+    }catch(e){return null;}
+  }
+  // 음력 월/일 → 해당 연도의 양력 날짜 문자열 (캐시 포함, O(365) 탐색)
+  function lunarToSolar(year, lunarMonth, lunarDay){
+    const key=`${year}-${lunarMonth}-${lunarDay}`;
+    if(_l2sCache[key]!==undefined) return _l2sCache[key];
+    const fmt=_getLunarFmt();
+    if(!fmt){ _l2sCache[key]=null; return null; }
+    try{
+      for(let m=1;m<=12;m++){
+        const dmax=new Date(year,m,0).getDate();
+        for(let d=1;d<=dmax;d++){
+          const parts=fmt.formatToParts(new Date(year,m-1,d,12,0,0));
+          const mp=parts.find(p=>p.type==='month')?.value||'';
+          const dp=parts.find(p=>p.type==='day')?.value||'';
+          const lm2=parseInt(mp.match(/\d+/)?.[0]||'0');
+          const ld2=parseInt(dp.match(/\d+/)?.[0]||'0');
+          if(lm2===lunarMonth&&ld2===lunarDay){
+            const result=formatDate(year,m-1,d);
+            _l2sCache[key]=result; return result;
+          }
+        }
+      }
+    }catch(e){}
+    _l2sCache[key]=null; return null;
+  }
+
   // -----------------------------------------
   // 기념일 · 생일 가상 이벤트 생성 헬퍼
   // -----------------------------------------
+
+  // 기념일 1건의 다음 발생 양력 날짜 반환 (음력 지원)
+  function getAnnivNextDate(ann){
+    const today=todayStr();
+    const [oy,om,od]=ann.date.split('-').map(Number);
+    const cy=new Date().getFullYear();
+    const pad=n=>String(n).padStart(2,'0');
+    for(const y of [cy,cy+1,cy+2]){
+      if(!ann.isLunar && y<=oy) continue;
+      const ds=ann.isLunar ? lunarToSolar(y,om,od) : `${y}-${pad(om)}-${pad(od)}`;
+      if(ds && ds>=today) return ds;
+    }
+    return null;
+  }
 
   // D-day 문자열 반환 ('D-Day' | 'D-3' | 'D+5')
   function calcDday(targetDateStr){
@@ -700,14 +795,16 @@
 
       // 연도별 이벤트 (탄생/원년 제외 n >= 1)
       for(let y=Math.max(sy,oy+1); y<=ey; y++){
-        const ds=`${y}-${pad(om)}-${pad(od)}`;
+        const ds=ann.isLunar ? lunarToSolar(y,om,od) : `${y}-${pad(om)}-${pad(od)}`;
+        if(!ds) continue;
         if(ds>=startStr && ds<=endStr){
           const n=y-oy;
+          const lunarSuffix=ann.isLunar?' 🌙':'';
           result.push({
             isAnniversary:true,
             anniversaryId:ann.id,
             anniversaryType:ann.type,
-            text: ann.type==='birthday' ? `🎂 ${ann.name} (${n}번째 생일)` : `💕 ${ann.name} (${n}주년)`,
+            text: ann.type==='birthday' ? `🎂 ${ann.name} (${n}번째 생일${lunarSuffix})` : `💕 ${ann.name} (${n}주년${lunarSuffix})`,
             startDate:ds, endDate:ds, from:'', to:'',
             color, user:userBadge, important:true
           });
@@ -744,16 +841,45 @@
     renderAnniversaryList();
     document.getElementById('anniversaryModal').classList.remove('hidden');
   }
-  function closeAnniversaryModal(){
-    document.getElementById('anniversaryModal').classList.add('hidden');
+  function resetAnnivForm(){
+    editingAnnivId=null;
     document.getElementById('annivName').value='';
     document.getElementById('annivDate').value='';
     document.getElementById('anniv100days').checked=false;
-    // 타입 초기화
+    document.getElementById('annivLunar').checked=false;
     document.getElementById('annivTypeBirthday').checked=true;
     document.getElementById('annivBirthdayLabel').classList.add('active');
     document.getElementById('annivAnnivLabel').classList.remove('active');
     document.getElementById('anniv100dayLabel').classList.add('hidden');
+    document.getElementById('annivFormTitle').textContent='+ 새로 추가';
+    document.getElementById('anniversaryAddBtn').textContent='추가';
+    document.getElementById('anniversaryCancelEditBtn').classList.add('hidden');
+  }
+  function closeAnniversaryModal(){
+    document.getElementById('anniversaryModal').classList.add('hidden');
+    resetAnnivForm();
+  }
+  function startEditAnniversary(ann){
+    editingAnnivId=ann.id;
+    if(ann.type==='birthday'){
+      document.getElementById('annivTypeBirthday').checked=true;
+      document.getElementById('annivBirthdayLabel').classList.add('active');
+      document.getElementById('annivAnnivLabel').classList.remove('active');
+      document.getElementById('anniv100dayLabel').classList.add('hidden');
+    } else {
+      document.getElementById('annivTypeAnniversary').checked=true;
+      document.getElementById('annivAnnivLabel').classList.add('active');
+      document.getElementById('annivBirthdayLabel').classList.remove('active');
+      document.getElementById('anniv100dayLabel').classList.remove('hidden');
+      document.getElementById('anniv100days').checked=!!ann.show100days;
+    }
+    document.getElementById('annivName').value=ann.name;
+    document.getElementById('annivDate').value=ann.date;
+    document.getElementById('annivLunar').checked=!!ann.isLunar;
+    document.getElementById('annivFormTitle').textContent='✏️ 수정';
+    document.getElementById('anniversaryAddBtn').textContent='저장';
+    document.getElementById('anniversaryCancelEditBtn').classList.remove('hidden');
+    document.getElementById('annivFormTitle').scrollIntoView({behavior:'smooth',block:'nearest'});
   }
   function renderAnniversaryList(){
     const el=document.getElementById('anniversaryList');
@@ -764,15 +890,38 @@
       return;
     }
     anns.forEach(ann=>{
-      // 기준일부터 오늘까지 경과 일수 (계속 누적)
-      const elapsed=daysBetween(ann.date, todayStr());
+      const elapsed=daysBetween(ann.date, todayStr()); // 기준일부터 오늘까지 경과일
       const icon=ann.type==='birthday'?'🎂':'💕';
       const typeLabel=ann.type==='birthday'?'생일':'기념일';
-      const elapsedClass='anniv-dday'+(ann.type==='anniversary'?' type-anniversary':'');
-      const elapsedHtml=elapsed>=0?`<span class="${elapsedClass}">${elapsed}일째</span>`:'';
+      const isAnniv=ann.type==='anniversary';
+      const elapsedCls='anniv-dday'+(isAnniv?' type-anniversary':'');
+      const elapsedHtml=elapsed>=0?`<span class="${elapsedCls}">${elapsed}일째</span>`:'';
+
+      // 다음 발생일까지 D-day
+      const nextDate=getAnnivNextDate(ann);
+      let ddayHtml='';
+      if(nextDate){
+        const ddLabel=calcDday(nextDate);
+        const ddCls='anniv-dday anniv-dday-sm'+(isAnniv?' type-anniversary':'')+(ddLabel==='D-Day'?' dday-today':'');
+        ddayHtml=`<span class="${ddCls}">${ddLabel}</span>`;
+      }
+
+      // 음력 날짜 표시 (생일인 경우, 양력→음력 변환)
+      let lunarHtml='';
+      if(ann.type==='birthday'){
+        // 음력 등록이면 ann.date가 음력 날짜 → 그대로 표시
+        // 양력 등록이면 solarToLunar로 음력 변환해서 표시
+        if(ann.isLunar){
+          const [,m,d]=ann.date.split('-').map(Number);
+          lunarHtml=`<span class="anniv-lunar-badge">🌙 음력 ${m}월 ${d}일</span>`;
+        } else {
+          const lunar=solarToLunar(ann.date);
+          if(lunar) lunarHtml=`<span class="anniv-lunar-badge">🌙 음력 ${lunar.month}월 ${lunar.day}일${lunar.leap?' (윤달)':''}</span>`;
+        }
+      }
 
       const item=document.createElement('div');
-      item.className='anniv-item'+(ann.type==='anniversary'?' type-anniversary':'');
+      item.className='anniv-item'+(isAnniv?' type-anniversary':'');
       item.innerHTML=`
         <div class="anniv-row-left">
           <span class="anniv-icon-lbl">${icon}</span>
@@ -780,13 +929,20 @@
             <div class="anniv-name-row">
               <span class="anniv-name">${ann.name}</span>
               <span class="anniv-type-tag">${typeLabel}</span>
+              ${ann.isLunar?'<span class="anniv-lunar-tag">🌙음력</span>':''}
               ${elapsedHtml}
+              ${ddayHtml}
             </div>
-            <div class="anniv-orig-date">📅 ${ann.date} 부터</div>
+            <div class="anniv-orig-date">📅 ${ann.date} 부터${lunarHtml}</div>
+            ${nextDate&&nextDate!==todayStr()?`<div class="anniv-next-date">다음: ${nextDate}</div>`:''}
           </div>
         </div>
-        <button class="anniv-del-btn">삭제</button>`;
+        <div class="anniv-actions">
+          <button class="anniv-edit-btn">✏️</button>
+          <button class="anniv-del-btn">삭제</button>
+        </div>`;
       item.querySelector('.anniv-del-btn').addEventListener('click',()=>deleteAnniversary(ann.id));
+      item.querySelector('.anniv-edit-btn').addEventListener('click',()=>startEditAnniversary(ann));
       el.appendChild(item);
     });
   }
@@ -795,20 +951,24 @@
     const name=document.getElementById('annivName').value.trim();
     const date=document.getElementById('annivDate').value;
     const show100days=type==='anniversary'&&document.getElementById('anniv100days').checked;
+    const isLunar=type==='birthday'&&document.getElementById('annivLunar').checked;
     if(!name||!date){ alert('이름과 날짜를 모두 입력하세요.'); return; }
     const btn=document.getElementById('anniversaryAddBtn');
     btn.disabled=true;
     try{
-      const item={id:makeId(),type,name,date,show100days,createdBy:currentUser};
-      await apiAddAnniversary(item);
-      document.getElementById('annivName').value='';
-      document.getElementById('annivDate').value='';
-      document.getElementById('anniv100days').checked=false;
+      if(editingAnnivId){
+        // 수정 모드 — PUT API 호출
+        await apiUpdateAnniversary(editingAnnivId,{type,name,date,show100days,isLunar});
+      } else {
+        // 추가 모드 — POST API 호출
+        await apiAddAnniversary({id:makeId(),type,name,date,show100days,isLunar,createdBy:currentUser});
+      }
+      resetAnnivForm();
       renderAnniversaryList();
       renderCalendar();
       renderEventList();
     }catch(e){
-      alert('추가 실패: '+e.message);
+      alert((editingAnnivId?'수정':'추가')+' 실패: '+e.message);
     }finally{
       btn.disabled=false;
     }
@@ -2045,19 +2205,27 @@
   document.getElementById('anniversaryBtn').addEventListener('click',openAnniversaryModal);
   document.getElementById('anniversaryCloseBtn').addEventListener('click',closeAnniversaryModal);
   document.getElementById('anniversaryAddBtn').addEventListener('click',addAnniversary);
+  document.getElementById('anniversaryCancelEditBtn').addEventListener('click',resetAnnivForm);
   document.getElementById('anniversaryModal').addEventListener('click',e=>{
     if(e.target===document.getElementById('anniversaryModal')) closeAnniversaryModal();
   });
-  // 기념일 타입 라디오 토글 — 100일 체크박스 표시 여부
+  // 기념일 타입 라디오 토글 — 100일/음력 체크박스 표시 여부
   document.getElementById('annivTypeBirthday').addEventListener('change',()=>{
     document.getElementById('annivBirthdayLabel').classList.add('active');
     document.getElementById('annivAnnivLabel').classList.remove('active');
     document.getElementById('anniv100dayLabel').classList.add('hidden');
+    // 생일에서만 음력 체크 가능
+    document.getElementById('annivLunarLabel').style.opacity='1';
+    document.getElementById('annivLunarLabel').style.pointerEvents='';
   });
   document.getElementById('annivTypeAnniversary').addEventListener('change',()=>{
     document.getElementById('annivAnnivLabel').classList.add('active');
     document.getElementById('annivBirthdayLabel').classList.remove('active');
     document.getElementById('anniv100dayLabel').classList.remove('hidden');
+    // 기념일에서는 음력 체크 비활성화
+    document.getElementById('annivLunar').checked=false;
+    document.getElementById('annivLunarLabel').style.opacity='0.4';
+    document.getElementById('annivLunarLabel').style.pointerEvents='none';
   });
   // 레이블 클릭으로도 라디오 선택 가능하게
   document.getElementById('annivBirthdayLabel').addEventListener('click',()=>{

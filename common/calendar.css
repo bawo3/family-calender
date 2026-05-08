@@ -248,8 +248,15 @@ body.dark .pwa-install-bar{background:rgba(255,255,255,0.04);}
 .anniv-orig-date{font-size:11px;color:var(--text-secondary);margin-bottom:2px;}
 .anniv-next{font-size:12px;color:var(--text-base);margin-bottom:1px;}
 .anniv-100-info{font-size:11px;color:var(--text-secondary);margin-top:2px;}
-.anniv-del-btn{background:#e74c3c;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:12px;flex-shrink:0;align-self:center;}
+.anniv-actions{display:flex;gap:5px;align-items:center;flex-shrink:0;align-self:center;}
+.anniv-edit-btn{background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:14px;cursor:pointer;color:var(--text-secondary);transition:background .15s;}
+.anniv-edit-btn:hover{background:var(--day-hover);}
+.anniv-del-btn{background:#e74c3c;color:#fff;border:none;padding:4px 10px;border-radius:5px;cursor:pointer;font-size:12px;}
 .anniv-del-btn:hover{background:#c0392b;}
+.anniv-lunar-tag{font-size:10px;background:#7c4dff;color:#fff;border-radius:3px;padding:1px 5px;white-space:nowrap;}
+.anniv-lunar-badge{font-size:11px;color:#7c4dff;margin-left:6px;}
+body.dark .anniv-lunar-badge{color:#b39ddb;}
+.anniv-next-date{font-size:11px;color:var(--text-secondary);margin-top:1px;}
 /* 추가 폼 */
 .anniv-add-section{background:var(--panel-bg);border-radius:8px;padding:12px;border:1px solid var(--border);margin-bottom:12px;}
 .anniv-add-section h3{font-size:13px;color:var(--text-secondary);margin-bottom:10px;}
@@ -260,8 +267,8 @@ body.dark .pwa-install-bar{background:rgba(255,255,255,0.04);}
 .anniv-type-btn.active{border-color:#e84393;background:rgba(232,67,147,0.1);font-weight:bold;color:var(--text-primary);}
 .anniv-input{width:100%;padding:9px;border:1px solid var(--border);border-radius:6px;font-size:14px;background:var(--input-bg);color:var(--text-base);margin-bottom:8px;box-sizing:border-box;font-family:inherit;}
 .anniv-input:focus{outline:none;border-color:#e84393;}
-.anniv-100days-label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-base);cursor:pointer;padding:5px 0;}
-.anniv-100days-label input{width:15px;height:15px;cursor:pointer;accent-color:#e74c3c;}
+.anniv-100days-label,.anniv-check-label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-base);cursor:pointer;padding:5px 0;transition:opacity .2s;}
+.anniv-100days-label input,.anniv-check-label input{width:15px;height:15px;cursor:pointer;accent-color:#7c4dff;}
 /* 달력 기념일 이벤트 바 */
 .event-bar.anniv-bar{opacity:0.92;}
 /* 일정 목록 기념일 항목 */

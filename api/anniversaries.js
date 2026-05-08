@@ -26,6 +26,17 @@ export default async function handler(req, res) {
       await setJson(prefix, 'anniversaries', items);
       return send(res, 200, { ok: true });
     }
+    if (req.method === 'PUT') {
+      if (!id) return send(res, 400, { error: 'id required' });
+      const update = req.body;
+      if (!update) return send(res, 400, { error: 'body required' });
+      const items = await getJson(prefix, 'anniversaries', []);
+      const idx = items.findIndex(a => a.id === id);
+      if (idx === -1) return send(res, 404, { error: 'not found' });
+      items[idx] = { ...items[idx], ...update, id };
+      await setJson(prefix, 'anniversaries', items);
+      return send(res, 200, { ok: true });
+    }
     if (req.method === 'DELETE') {
       if (!id) return send(res, 400, { error: 'id required' });
       const items = await getJson(prefix, 'anniversaries', []);
