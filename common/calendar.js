@@ -911,12 +911,12 @@
       return;
     }
     anns.forEach(ann=>{
-      const elapsed=daysBetween(ann.date, todayStr()); // 기준일부터 오늘까지 경과일
+      const elapsed=daysBetween(ann.date, todayStr())+1; // D-Day=1일째 (기준일 당일 포함)
       const icon=ann.type==='birthday'?'🎂':'💕';
       const typeLabel=ann.type==='birthday'?'생일':'기념일';
       const isAnniv=ann.type==='anniversary';
       const elapsedCls='anniv-dday'+(isAnniv?' type-anniversary':'');
-      const elapsedHtml=elapsed>=0?`<span class="${elapsedCls}">${elapsed}일째</span>`:'';
+      const elapsedHtml=elapsed>=1?`<span class="${elapsedCls}">${elapsed}일째</span>`:'';
 
       // 다음 발생일까지 D-day
       const nextDate=getAnnivNextDate(ann);
