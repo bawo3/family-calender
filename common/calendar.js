@@ -62,21 +62,27 @@
       function makeIconCanvas(sz){
         const cv=document.createElement('canvas');cv.width=sz;cv.height=sz;
         const cx=cv.getContext('2d');
-        const r=sz*0.20; // 둥근 모서리 반지름 (20%)
+        const r=sz*0.22; // 둥근 모서리 반지름
 
-        // 배경 — accent 색 꽉 채우기
-        cx.fillStyle=accent;
+        // clip 적용 — 이모지가 모서리 밖으로 튀어나가지 않도록
+        cx.save();
         cx.beginPath();
         cx.moveTo(r,0);cx.lineTo(sz-r,0);
         cx.arcTo(sz,0,sz,r,r);cx.lineTo(sz,sz-r);
         cx.arcTo(sz,sz,sz-r,sz,r);cx.lineTo(r,sz);
         cx.arcTo(0,sz,0,sz-r,r);cx.lineTo(0,r);
-        cx.arcTo(0,0,r,0,r);cx.closePath();cx.fill();
+        cx.arcTo(0,0,r,0,r);cx.closePath();
+        cx.clip();
 
-        // 이모지 — 캔버스의 55% 크기로 중앙 배치 (여백 확보)
-        cx.font=`${Math.floor(sz*0.55)}px serif`;
+        // 배경 — accent 색 꽉 채우기
+        cx.fillStyle=accent;cx.fill();
+
+        // 이모지 — 48%로 줄여서 주변 여백 확보 (iOS 잘림 방지)
+        cx.font=`${Math.floor(sz*0.48)}px serif`;
         cx.textAlign='center';cx.textBaseline='middle';
-        cx.fillText(emoji,sz/2,sz/2+sz*0.02);
+        // iOS에서 textBaseline='middle'이 알파벳 기준이라 이모지가 살짝 위에 그려짐 — 3% 아래로 보정
+        cx.fillText(emoji,sz/2,sz/2+sz*0.03);
+        cx.restore();
         return cv;
       }
 
@@ -227,6 +233,7 @@
         <span class="u-name" id="userName"></span>
         <button class="u-btn" id="skinSwitchBtn"></button>
         <button class="u-btn" id="reloadBtn" title="새로고침">🔄</button>
+        <button class="u-btn" id="zoomBtn" title="글자 크기 조절">가</button>
         <button class="u-btn" id="alarmBtn" title="중요일정 알림 설정">🔕</button>
         <button class="u-btn" id="noticeBtn">📢</button>
         <button class="u-btn" id="anniversaryBtn" title="기념일/생일 관리">💗</button>
@@ -2216,6 +2223,26 @@
   });
   document.getElementById('addBtn').addEventListener('click',addEvent);
   document.getElementById('reloadBtn').addEventListener('click',reloadData);
+  // 글자 크기 3단계 순환 — localStorage에 저장
+  (function initZoom(){
+    const LS_ZOOM=PREFIX+'_font_zoom';
+    const ZOOM_SEQ=['','lg','xl'];
+    const ZOOM_LABELS={'':'가','lg':'가+','xl':'가++'};
+    let z=localStorage.getItem(LS_ZOOM)||'';
+    function applyZoom(v){
+      document.body.classList.remove('font-lg','font-xl');
+      if(v==='lg') document.body.classList.add('font-lg');
+      else if(v==='xl') document.body.classList.add('font-xl');
+      const btn=document.getElementById('zoomBtn');
+      if(btn) btn.textContent=ZOOM_LABELS[v]||'가';
+    }
+    applyZoom(z);
+    document.getElementById('zoomBtn').addEventListener('click',()=>{
+      z=ZOOM_SEQ[(ZOOM_SEQ.indexOf(z)+1)%3];
+      localStorage.setItem(LS_ZOOM,z);
+      applyZoom(z);
+    });
+  })();
   document.getElementById('alarmBtn').addEventListener('click',toggleNotify);
   document.getElementById('noticeBtn').addEventListener('click',openNoticeModal);
   document.getElementById('noticeCloseBtn').addEventListener('click',closeNoticeModal);
