@@ -233,7 +233,7 @@
         <span class="u-name" id="userName"></span>
         <button class="u-btn" id="skinSwitchBtn"></button>
         <button class="u-btn" id="reloadBtn" title="새로고침">🔄</button>
-        <button class="u-btn" id="zoomBtn" title="글자 크기 조절">가</button>
+        <button class="u-btn" id="zoomBtn" title="글자 크기 조절">🔍1</button>
         <button class="u-btn" id="alarmBtn" title="중요일정 알림 설정">🔕</button>
         <button class="u-btn" id="noticeBtn">📢</button>
         <button class="u-btn" id="anniversaryBtn" title="기념일/생일 관리">💗</button>
@@ -2226,19 +2226,20 @@
   // 글자 크기 3단계 순환 — localStorage에 저장
   (function initZoom(){
     const LS_ZOOM=PREFIX+'_font_zoom';
-    const ZOOM_SEQ=['','lg','xl'];
-    const ZOOM_LABELS={'':'가','lg':'가+','xl':'가++'};
+    const ZOOM_SEQ=['','lg','xl','xxl'];
+    const ZOOM_LABELS={'':'🔍1','lg':'🔍2','xl':'🔍3','xxl':'🔍4'};
     let z=localStorage.getItem(LS_ZOOM)||'';
     function applyZoom(v){
-      document.body.classList.remove('font-lg','font-xl');
+      document.body.classList.remove('font-lg','font-xl','font-xxl');
       if(v==='lg') document.body.classList.add('font-lg');
       else if(v==='xl') document.body.classList.add('font-xl');
+      else if(v==='xxl') document.body.classList.add('font-xxl');
       const btn=document.getElementById('zoomBtn');
-      if(btn) btn.textContent=ZOOM_LABELS[v]||'가';
+      if(btn) btn.textContent=ZOOM_LABELS[v]||'🔍1';
     }
     applyZoom(z);
     document.getElementById('zoomBtn').addEventListener('click',()=>{
-      z=ZOOM_SEQ[(ZOOM_SEQ.indexOf(z)+1)%3];
+      z=ZOOM_SEQ[(ZOOM_SEQ.indexOf(z)+1)%4];
       localStorage.setItem(LS_ZOOM,z);
       applyZoom(z);
     });

@@ -319,3 +319,27 @@ body.font-xl.dark .event-list li{box-shadow:0 2px 6px rgba(0,0,0,0.4);}
 body.font-xl .day.today{border-width:2px;}
 body.font-xl .event-important-badge{font-size:14px;padding:2px 8px;}
 body.font-xl .anniv-event-badge{font-size:13px;padding:2px 10px;}
+
+/* 4단계 — font-xxl (최대 확대 + 더 강한 고대비) */
+body.font-xxl .day .date-num{font-size:24px;}
+body.font-xxl .event-text{font-size:24px;font-weight:700;}
+body.font-xxl .event-bar{font-size:17px;height:28px;line-height:28px;}
+body.font-xxl .weekdays div{font-size:20px;padding:13px 2px;}
+body.font-xxl .event-panel h2{font-size:26px;}
+body.font-xxl .range-info{font-size:18px;}
+body.font-xxl .important-banner .b-item{font-size:20px;}
+body.font-xxl .important-banner .b-title{font-size:19px;}
+body.font-xxl .b-section-title{font-size:17px;}
+body.font-xxl .b-range{font-size:17px;}
+body.font-xxl .b-range-ip{font-size:18px;}
+body.font-xxl .event-user{font-size:19px;padding:4px 14px;}
+body.font-xxl .event-date-line{font-size:18px;}
+body.font-xxl .day .holiday-name{font-size:15px;}
+body.font-xxl .day{min-height:130px;}
+body.font-xxl .event-list li{padding:16px;border-left-width:7px;gap:10px;box-shadow:0 3px 8px rgba(0,0,0,0.15);}
+body.font-xxl.dark .event-list li{box-shadow:0 3px 8px rgba(0,0,0,0.5);}
+body.font-xxl .day.today{border-width:3px;}
+body.font-xxl .event-important-badge{font-size:16px;padding:3px 10px;}
+body.font-xxl .anniv-event-badge{font-size:15px;padding:3px 12px;}
+body.font-xxl .month-label{font-size:20px;}
+body.font-xxl .nav-btn{font-size:17px;padding:9px 15px;}
