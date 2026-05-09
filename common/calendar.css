@@ -60,7 +60,8 @@ body{font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;background:var
 .quick-login-list{display:flex;flex-wrap:wrap;gap:6px;}
 
 /* 캘린더 헤더 (compact) */
-.cal-header{margin-bottom:10px;}
+.cal-header{margin-bottom:10px;position:relative;padding-top:30px;}
+.logout-u-btn{position:absolute!important;top:0;right:0;}
 .cal-title-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px;}
 .cal-title{font-size:17px;font-weight:bold;color:var(--text-primary);}
 .user-bar{display:flex;align-items:center;gap:5px;}

@@ -226,6 +226,7 @@
 
 <div class="container hidden" id="calendarBox">
   <div class="cal-header">
+    <button class="u-btn logout-u-btn" id="logoutBtn">로그아웃</button>
     <div class="cal-title-row">
       <h1 class="cal-title" id="calTitle">${TITLE}</h1>
       <div class="user-bar">
@@ -237,7 +238,6 @@
         <button class="u-btn" id="alarmBtn" title="중요일정 알림 설정">🔕</button>
         <button class="u-btn" id="noticeBtn">📢</button>
         <button class="u-btn" id="anniversaryBtn" title="기념일/생일 관리">💗</button>
-        <button class="u-btn logout-u-btn" id="logoutBtn">로그아웃</button>
       </div>
     </div>
   </div>
