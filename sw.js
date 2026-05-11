@@ -1,14 +1,18 @@
 // 정적 자원 캐시 목록
-const CACHE = 'cal-v3';
+const CACHE = 'cal-v4';
 const PRECACHE = ['/common/calendar.css', '/common/calendar.js'];
 
-// 설치 시 정적 자원 캐시
+// 설치 시 — HTTP 캐시 우회해서 항상 최신 파일 저장
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE)));
+  e.waitUntil(
+    caches.open(CACHE).then(c =>
+      c.addAll(PRECACHE.map(url => new Request(url, {cache: 'no-cache'})))
+    )
+  );
   self.skipWaiting();
 });
 
-// 활성화 시 이전 캐시 제거
+// 활성화 시 이전 캐시 전부 제거
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
@@ -18,19 +22,20 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
-// 네트워크 요청 가로채기 — API는 항상 네트워크, 나머지는 캐시 우선
+// 요청 가로채기 — 네트워크 우선, 오프라인 시에만 캐시 폴백
 self.addEventListener('fetch', e => {
-  if (e.request.url.includes('/api/')) return;
+  if (e.request.url.includes('/api/')) return; // API는 항상 네트워크 통과
+
   e.respondWith(
-    caches.match(e.request).then(cached => {
-      if (cached) return cached;
-      return fetch(e.request).then(res => {
+    fetch(e.request, {cache: 'no-cache'})
+      .then(res => {
+        // 정상 응답이면 캐시에도 저장 (다음 오프라인 대비)
         if (res && res.status === 200 && res.type === 'basic') {
           caches.open(CACHE).then(c => c.put(e.request, res.clone()));
         }
         return res;
-      });
-    })
+      })
+      .catch(() => caches.match(e.request)) // 오프라인이면 캐시에서 반환
   );
 });
 
@@ -43,7 +48,6 @@ self.addEventListener('push', event => {
       body: data.body ?? '',
       tag: data.tag ?? 'cal-notification',
       data: { url: data.url ?? self.location.origin },
-      // 커스텀 액션 버튼 — 안드로이드 크롬에서 '수신거부' 옵션이 ⋮ 메뉴로 숨겨짐
       actions: [
         { action: 'open', title: '📅 열기' }
       ]
@@ -57,13 +61,11 @@ self.addEventListener('notificationclick', event => {
   const url = event.notification.data?.url ?? self.location.origin;
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-      // 이미 열린 탭이 있으면 포커스
       for (const client of list) {
         if (client.url.startsWith(self.location.origin) && 'focus' in client) {
           return client.focus();
         }
       }
-      // 없으면 새 탭으로 열기
       if (clients.openWindow) return clients.openWindow(url);
     })
   );
