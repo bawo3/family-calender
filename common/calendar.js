@@ -58,6 +58,9 @@
         }
       }catch(e){}
 
+      // CAL_CONFIG.iconEmojis 배열 — 멤버별 개별 이모지 그리드 지정 (선택)
+      const iconMembers = (cfg.iconEmojis && cfg.iconEmojis.length >= 2) ? cfg.iconEmojis : null;
+
       // sz 크기의 아이콘 캔버스 생성 (재사용 헬퍼)
       function makeIconCanvas(sz){
         const cv=document.createElement('canvas');cv.width=sz;cv.height=sz;
@@ -77,11 +80,48 @@
         // 배경 — accent 색 꽉 채우기
         cx.fillStyle=accent;cx.fill();
 
-        // 이모지 — 48%로 줄여서 주변 여백 확보 (iOS 잘림 방지)
-        cx.font=`${Math.floor(sz*0.48)}px serif`;
+        // 흰 원 배경
+        const circleR=sz*0.42;
+        cx.fillStyle='rgba(255,255,255,0.92)';
+        cx.beginPath();cx.arc(sz/2,sz/2,circleR,0,Math.PI*2);cx.fill();
+
         cx.textAlign='center';cx.textBaseline='middle';
-        // iOS에서 textBaseline='middle'이 알파벳 기준이라 이모지가 살짝 위에 그려짐 — 3% 아래로 보정
-        cx.fillText(emoji,sz/2,sz/2+sz*0.03);
+
+        if(iconMembers){
+          // 개별 이모지 그리드 — Android에서 ZWJ 복합 이모지가 그림자로 보이는 문제 근본 해결
+          const fz=Math.floor(sz*0.28);
+          cx.font=`${fz}px serif`;
+          const n=iconMembers.length;
+          if(n>=4){
+            // 2×2 그리드
+            const ox=sz*0.23,oy=sz*0.22;
+            cx.fillText(iconMembers[0],sz/2-ox,sz/2-oy); // 좌상
+            cx.fillText(iconMembers[1],sz/2+ox,sz/2-oy); // 우상
+            cx.fillText(iconMembers[2],sz/2-ox,sz/2+oy); // 좌하
+            cx.fillText(iconMembers[3],sz/2+ox,sz/2+oy); // 우하
+          } else if(n===3){
+            // 위 2개, 아래 1개 가운데
+            const ox=sz*0.22,oy=sz*0.20;
+            cx.fillText(iconMembers[0],sz/2-ox,sz/2-oy);
+            cx.fillText(iconMembers[1],sz/2+ox,sz/2-oy);
+            cx.fillText(iconMembers[2],sz/2,sz/2+oy);
+          } else {
+            // 2개: 좌우
+            const ox=sz*0.22;
+            cx.fillText(iconMembers[0],sz/2-ox,sz/2);
+            cx.fillText(iconMembers[1],sz/2+ox,sz/2);
+          }
+        } else {
+          // 단일 이모지 (기존 방식) — measureText로 폭 측정 후 자동 축소
+          const maxW=circleR*1.60;
+          let fontSize=Math.floor(sz*0.46);
+          cx.font=`${fontSize}px serif`;
+          const measuredW=cx.measureText(emoji).width;
+          if(measuredW>maxW) fontSize=Math.floor(fontSize*maxW/measuredW);
+          cx.font=`${fontSize}px serif`;
+          // iOS textBaseline='middle'은 알파벳 기준 — 이모지를 3% 아래로 보정
+          cx.fillText(emoji,sz/2,sz/2+sz*0.03);
+        }
         cx.restore();
         return cv;
       }
@@ -148,10 +188,16 @@
     if(sessionStorage.getItem(PWA_DISMISS_KEY)) return; // 이번 세션 닫기 클릭
     const bar=document.getElementById('pwaInstallBar');
     if(bar) bar.classList.remove('hidden');
+    // Android 전용 설치 섹션도 함께 표시
+    const isAndroid=/Android/i.test(navigator.userAgent);
+    const abox=document.getElementById('androidInstallBox');
+    if(abox&&isAndroid) abox.classList.remove('hidden');
   }
   function _hideInstallBar(){
     const bar=document.getElementById('pwaInstallBar');
     if(bar) bar.classList.add('hidden');
+    const abox=document.getElementById('androidInstallBox');
+    if(abox) abox.classList.add('hidden');
   }
 
   // Android/Chrome: 설치 프롬프트 이벤트 캡처
@@ -166,7 +212,7 @@
     _deferredInstallPrompt=null;
   });
 
-  async function _triggerInstall(){
+  async function _triggerInstall(fromAndroid){
     if(_deferredInstallPrompt){
       // Android/Chrome: 시스템 설치 다이얼로그
       _deferredInstallPrompt.prompt();
@@ -174,10 +220,13 @@
       _deferredInstallPrompt=null;
       if(outcome==='accepted') _hideInstallBar();
     } else if(isIOS()){
-      // iOS: 수동 안내 모달 (기존 iosInstallModal 재사용)
+      // iOS: 수동 안내 모달
       showIOSInstallModal();
+    } else if(fromAndroid){
+      // Android인데 beforeinstallprompt 없는 경우 — 수동 안내 표시
+      const manual=document.getElementById('androidInstallManual');
+      if(manual) manual.classList.remove('hidden');
     } else {
-      // Chrome 데스크탑 등 — 이미 설치됐거나 불가
       alert('이 브라우저에서는 주소창 오른쪽의 설치 아이콘(⊕)을 눌러 설치할 수 있어요.');
     }
   }
@@ -277,11 +326,22 @@
     <ul class="event-list" id="eventList"></ul>
   </div>
 
-  <!-- 앱 설치 안내 바 (standalone 모드이면 자동 숨김) -->
+  <!-- 앱 설치 안내 바 (iOS 전용 — standalone 모드이면 자동 숨김) -->
   <div id="pwaInstallBar" class="pwa-install-bar hidden">
     <span class="pwa-install-txt">📲 이 캘린더를 홈 화면에 추가하면 앱처럼 사용할 수 있어요</span>
     <button class="pwa-install-btn" id="pwaInstallBtn">설치하기</button>
     <button class="pwa-dismiss-btn" id="pwaInstallDismiss" title="닫기">✕</button>
+  </div>
+
+  <!-- Android 전용 앱 설치 섹션 (맨 아래 고정) -->
+  <div id="androidInstallBox" class="android-install-box hidden">
+    <div class="ai-icon">🤖</div>
+    <div class="ai-title">Android 앱으로 설치하기</div>
+    <div class="ai-desc">설치하면 홈 화면에서 앱처럼 빠르게 열 수 있어요.<br>인터넷 없이도 이전 데이터를 볼 수 있습니다.</div>
+    <button class="ai-btn" id="androidInstallBtn">📲 지금 설치하기</button>
+    <div class="ai-manual hidden" id="androidInstallManual">
+      Chrome 메뉴(⋮) → <b>홈 화면에 추가</b> 또는 <b>앱 설치</b> 를 눌러주세요
+    </div>
   </div>
 </div>
 
@@ -2249,6 +2309,7 @@
   document.getElementById('noticeCloseBtn').addEventListener('click',closeNoticeModal);
   document.getElementById('noticeAddBtn').addEventListener('click',addNotice);
   document.getElementById('pwaInstallBtn').addEventListener('click', _triggerInstall);
+  document.getElementById('androidInstallBtn').addEventListener('click', ()=>_triggerInstall(true));
   document.getElementById('pwaInstallDismiss').addEventListener('click', ()=>{
     sessionStorage.setItem(PWA_DISMISS_KEY,'1');
     _hideInstallBar();

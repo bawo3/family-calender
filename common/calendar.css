@@ -228,6 +228,18 @@ body.dark .pwa-install-bar{background:rgba(255,255,255,0.04);}
   .pwa-install-btn{padding:6px 12px;font-size:12px;}
 }
 
+/* Android 앱 설치 섹션 (맨 아래 전용 카드) */
+.android-install-box{margin-top:24px;padding:22px 20px;background:linear-gradient(135deg,#e8f5e9,#f1f8e9);border:1.5px solid #a5d6a7;border-radius:12px;text-align:center;}
+body.dark .android-install-box{background:linear-gradient(135deg,rgba(76,175,80,0.14),rgba(139,195,74,0.08));border-color:rgba(76,175,80,0.35);}
+.ai-icon{font-size:34px;margin-bottom:6px;}
+.ai-title{font-size:15px;font-weight:bold;color:#2e7d32;margin-bottom:5px;}
+body.dark .ai-title{color:#81c784;}
+.ai-desc{font-size:12.5px;color:var(--text-secondary);margin-bottom:14px;line-height:1.6;}
+.ai-btn{background:#4caf50;color:#fff;border:none;padding:14px 0;border-radius:9px;cursor:pointer;font-size:15px;font-weight:bold;width:100%;transition:background .15s;letter-spacing:0.3px;}
+.ai-btn:hover,.ai-btn:active{background:#388e3c;}
+.ai-manual{margin-top:12px;font-size:12px;color:var(--text-secondary);background:var(--panel-bg);border-radius:7px;padding:10px 14px;line-height:1.7;}
+body.dark .ai-manual{background:rgba(255,255,255,0.05);}
+
 /* =========================================
    기념일 · 생일 관련 스타일
    ========================================= */

@@ -17,7 +17,9 @@
   // 이 캘린더 고유 설정 (스토리지 키 접두사 + 화면 제목)
   window.CAL_CONFIG = {
     prefix: 'family',
-    title:  '👨‍👩‍👧‍👦 가족 캘린더'
+    title:  '👨‍👩‍👦‍👦 가족 캘린더',
+    // 아빠·엄마·아들·아들 — 단일 이모지 배열로 지정해야 Android에서 그림자 없이 선명하게 표시됨
+    iconEmojis: ['👨', '👩', '👦', '👦']
   };
 </script>
 <script src="common/calendar.js"></script>

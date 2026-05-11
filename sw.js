@@ -1,5 +1,5 @@
 // 정적 자원 캐시 목록
-const CACHE = 'cal-v2';
+const CACHE = 'cal-v3';
 const PRECACHE = ['/common/calendar.css', '/common/calendar.js'];
 
 // 설치 시 정적 자원 캐시
