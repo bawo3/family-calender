@@ -2318,13 +2318,12 @@
   });
   document.getElementById('addBtn').addEventListener('click',addEvent);
   document.getElementById('reloadBtn').addEventListener('click',reloadData);
-  // 글자 크기 4단계 순환 — 버튼 클릭 + 핀치 제스처 지원
+  // 글자 크기 4단계 순환 — 버튼 클릭 전용 (핀치는 아래 initPinchZoom에서 별도 처리)
   (function initZoom(){
     const LS_ZOOM=PREFIX+'_font_zoom';
     const ZOOM_SEQ=['','lg','xl','xxl'];
     const ZOOM_LABELS={'':'🔍1','lg':'🔍2','xl':'🔍3','xxl':'🔍4'};
     let z=localStorage.getItem(LS_ZOOM)||'';
-
     function applyZoom(v){
       document.body.classList.remove('font-lg','font-xl','font-xxl');
       if(v==='lg') document.body.classList.add('font-lg');
@@ -2333,23 +2332,29 @@
       const btn=document.getElementById('zoomBtn');
       if(btn) btn.textContent=ZOOM_LABELS[v]||'🔍1';
     }
-
-    // dir: +1 확대, -1 축소
-    function stepZoom(dir){
-      const idx=ZOOM_SEQ.indexOf(z);
-      z=ZOOM_SEQ[(idx+dir+4)%4];
+    applyZoom(z);
+    document.getElementById('zoomBtn').addEventListener('click',()=>{
+      z=ZOOM_SEQ[(ZOOM_SEQ.indexOf(z)+1)%4];
       localStorage.setItem(LS_ZOOM,z);
       applyZoom(z);
+    });
+  })();
+
+  // 핀치 제스처 — CSS zoom으로 100%~200% 부드럽게 확대/축소
+  (function initPinchZoom(){
+    const LS_SCALE=PREFIX+'_pinch_scale';
+    const MIN=1.0, MAX=2.0;
+    let scale=Math.min(MAX,Math.max(MIN,parseFloat(localStorage.getItem(LS_SCALE))||1.0));
+    let startDist=0, startScale=1.0, isPinching=false;
+
+    function applyScale(s){
+      scale=Math.min(MAX,Math.max(MIN,s));
+      document.body.style.zoom=scale;
     }
 
-    applyZoom(z);
-    document.getElementById('zoomBtn').addEventListener('click',()=>stepZoom(+1));
+    applyScale(scale); // 저장된 배율 복원
 
-    // 핀치 제스처 — 두 손가락 벌리면 확대, 오므리면 축소
-    let pinchStart=0, pinchLast=0, isPinching=false;
-    const THRESHOLD=40; // 40px 이상 변해야 단계 변경
-
-    function touchDist(touches){
+    function getDist(touches){
       const dx=touches[0].clientX-touches[1].clientX;
       const dy=touches[0].clientY-touches[1].clientY;
       return Math.hypot(dx,dy);
@@ -2357,27 +2362,24 @@
 
     document.addEventListener('touchstart',e=>{
       if(e.touches.length===2){
-        pinchStart=touchDist(e.touches);
-        pinchLast=pinchStart;
+        startDist=getDist(e.touches);
+        startScale=scale;
         isPinching=true;
       } else {
         isPinching=false;
       }
     },{passive:true});
 
-    // passive:false 필수 — 브라우저 기본 핀치줌 차단
+    // passive:false — 브라우저 기본 핀치줌 차단하고 우리 zoom 적용
     document.addEventListener('touchmove',e=>{
-      if(isPinching && e.touches.length===2){
-        e.preventDefault();
-        pinchLast=touchDist(e.touches);
-      }
+      if(!isPinching||e.touches.length!==2) return;
+      e.preventDefault();
+      applyScale(startScale*(getDist(e.touches)/startDist));
     },{passive:false});
 
     document.addEventListener('touchend',e=>{
-      if(isPinching && e.touches.length<2){
-        const diff=pinchLast-pinchStart;
-        if(diff>=THRESHOLD) stepZoom(+1);
-        else if(diff<=-THRESHOLD) stepZoom(-1);
+      if(isPinching&&e.touches.length<2){
+        localStorage.setItem(LS_SCALE,scale.toFixed(3));
         isPinching=false;
       }
     },{passive:true});
