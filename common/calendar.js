@@ -719,10 +719,31 @@
     return(f&&t)?`${fmt(f)}~${fmt(t)}까지`:f?`${fmt(f)}~`:t?`~${fmt(t)}까지`:'';
   }
   function fillHourOptions(){
-    const fromOpts=Array.from({length:24},(_,h)=>`<option value="${h}">${String(h).padStart(2,'0')}시</option>`).join('');
-    const toOpts  =Array.from({length:24},(_,h)=>`<option value="${h}">${String(h).padStart(2,'0')}시까지</option>`).join('');
-    document.getElementById('eventFrom').innerHTML=fromOpts;
-    document.getElementById('eventTo').innerHTML=toOpts;
+    const fromSel=document.getElementById('eventFrom');
+    const toSel=document.getElementById('eventTo');
+
+    // 시작 시간: 00~23시
+    fromSel.innerHTML=Array.from({length:24},(_,h)=>
+      `<option value="${h}">${String(h).padStart(2,'0')}시</option>`
+    ).join('');
+
+    // 종료 시간 옵션 생성 — minH부터 24시까지
+    function buildToOpts(minH){
+      return Array.from({length:25-minH},(_,i)=>{
+        const h=minH+i;
+        return `<option value="${h}">${String(h).padStart(2,'0')}시까지</option>`;
+      }).join('');
+    }
+    toSel.innerHTML=buildToOpts(0);
+
+    // 시작 시간 바꾸면 종료 시간 옵션을 시작시간 이상~24시로 업데이트
+    fromSel.addEventListener('change',()=>{
+      const fv=parseInt(fromSel.value,10);
+      const prevTo=parseInt(toSel.value,10);
+      toSel.innerHTML=buildToOpts(fv);
+      // 이전 종료 시간이 새 시작 시간보다 작으면 시작 시간과 동일하게 초기화
+      toSel.value=prevTo>=fv?prevTo:fv;
+    });
   }
   function minDate(a,b){return a<b?a:b;} function maxDate(a,b){return a>b?a:b;}
   function dateInRange(d,s,e){const lo=minDate(s,e),hi=maxDate(s,e);return d>=lo&&d<=hi;}
@@ -1846,13 +1867,32 @@
   }
   function updateSelectedLabel(){
     const label=document.getElementById('selectedDateLabel'),info=document.getElementById('rangeInfo');
-    if(!selectedStart){label.textContent='날짜를 선택하세요';info.textContent='';return;}
-    if(selectedStart===selectedEnd){
-      label.textContent=`${selectedStart} 일정`;
-      info.textContent='단일 날짜 선택됨';
-    }else{
+    const dateRow=document.getElementById('editDateRow');
+    const startInp=document.getElementById('editStartDate');
+    const endInp=document.getElementById('editEndDate');
+
+    if(!selectedStart){
+      label.textContent='날짜를 선택하세요';info.textContent='';
+      if(!editingEventId) dateRow.style.display='none';
+      return;
+    }
+
+    // 날짜 입력란 값 동기화 (수정 모드 또는 범위 선택 시 표시)
+    const isRange=selectedStart!==selectedEnd;
+    if(editingEventId||isRange){
+      dateRow.style.display='flex';
+      startInp.value=selectedStart;
+      endInp.value=selectedEnd;
+    } else {
+      if(!editingEventId) dateRow.style.display='none';
+    }
+
+    if(isRange){
       label.textContent=`${selectedStart} ~ ${selectedEnd} 기간 일정`;
       info.textContent=`총 ${daysBetween(selectedStart,selectedEnd)+1}일 기간 선택됨`;
+    }else{
+      label.textContent=`${selectedStart} 일정`;
+      info.textContent='단일 날짜 선택됨';
     }
   }
 
@@ -1979,9 +2019,10 @@
     document.getElementById('eventFrom').value=ev.from||'0';
     document.getElementById('eventTo').value=ev.to||'0';
     document.getElementById('importantCheck').checked=!!ev.important;
+    // editingEventId 먼저 설정해야 updateSelectedLabel에서 dateRow 표시됨
+    editingEventId=ev.id;
     activateInputs(); updateSelectedLabel(); renderCalendar(); renderEventList();
     // 추가 버튼 → 수정 완료로 변경
-    editingEventId=ev.id;
     const addBtn=document.getElementById('addBtn');
     addBtn.textContent='수정 완료';addBtn.style.background='#27ae60';
     // 수정 취소 버튼 표시
@@ -1993,11 +2034,6 @@
       addBtn.after(cancelBtn);
     }
     cancelBtn.style.display='';
-    // 날짜 직접 입력 필드 표시
-    const dateRow=document.getElementById('editDateRow');
-    dateRow.style.display='flex';
-    document.getElementById('editStartDate').value=ev.startDate;
-    document.getElementById('editEndDate').value=ev.endDate;
     // 달력 그리드 비활성화
     document.getElementById('daysGrid').classList.add('editing-mode');
     ['prevBtn','nextBtn','todayBtn'].forEach(id=>document.getElementById(id).disabled=true);
@@ -2007,6 +2043,7 @@
   }
   function cancelEdit(){
     editingEventId=null;
+    selectedStart=null; selectedEnd=null; tapFirst=null;
     const addBtn=document.getElementById('addBtn');
     addBtn.textContent='추가';addBtn.style.background='';
     const cancelBtn=document.getElementById('editCancelBtn');
@@ -2015,10 +2052,10 @@
     document.getElementById('eventFrom').value='0';
     document.getElementById('eventTo').value='0';
     document.getElementById('importantCheck').checked=false;
-    // 날짜 입력 필드 숨김 + 달력 복원
     document.getElementById('editDateRow').style.display='none';
     document.getElementById('daysGrid').classList.remove('editing-mode');
     ['prevBtn','nextBtn','todayBtn'].forEach(id=>document.getElementById(id).disabled=false);
+    renderCalendar(); renderEventList(); updateSelectedLabel();
   }
   async function apiUpdateEvent(id, updated){
     if(localMode){
@@ -2444,6 +2481,21 @@
   });
   ['eventInput','eventFrom','eventTo'].forEach(id=>{
     document.getElementById(id).addEventListener('keypress',e=>{if(e.key==='Enter')addEvent();});
+  });
+  // 날짜 입력란 변경 시 selectedStart/End 업데이트 → 캘린더 드래그 반영
+  document.getElementById('editStartDate').addEventListener('change',e=>{
+    const v=e.target.value; if(!v) return;
+    selectedStart=v;
+    // 시작일이 종료일보다 늦으면 종료일을 시작일로 맞춤
+    if(selectedEnd&&v>selectedEnd) selectedEnd=v;
+    updateSelectedLabel(); renderCalendar(); renderEventList();
+  });
+  document.getElementById('editEndDate').addEventListener('change',e=>{
+    const v=e.target.value; if(!v) return;
+    selectedEnd=v;
+    // 종료일이 시작일보다 이르면 시작일을 종료일로 맞춤
+    if(selectedStart&&v<selectedStart) selectedStart=v;
+    updateSelectedLabel(); renderCalendar(); renderEventList();
   });
   // 외부 클릭 시 1번째 탭 선택 초기화
   document.addEventListener('click',e=>{

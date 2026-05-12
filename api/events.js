@@ -14,7 +14,7 @@ function dateLabel(ev) {
   return ev.startDate === ev.endDate ? ev.startDate : `${ev.startDate} ~ ${ev.endDate}`;
 }
 
-// 알림 2번째 줄용 body: "이름: 일정내용 [중요도] [시간]"
+// 알림 2번째 줄용 body: "이름: 일정제목 [중요도] [시간]"
 function buildBody(user, ev) {
   const parts = [ev.text];
   if (ev.important) parts.push('⭐중요');
@@ -44,7 +44,7 @@ export default async function handler(req, res) {
       await setJson(prefix, 'events', events);
       try {
         await sendPushToPrefix(prefix, {
-          title: `📅 ${ev.text}: ${dateLabel(ev)}`,
+          title: `📅 등록: ${dateLabel(ev)}`,
           body: buildBody(ev.user, ev),
           tag: `ev_${ev.id}`
         });
@@ -65,7 +65,7 @@ export default async function handler(req, res) {
       await setJson(prefix, 'events', events);
       try {
         await sendPushToPrefix(prefix, {
-          title: `✏️ ${ev.text}: ${dateLabel(ev)}`,
+          title: `✏️ 수정: ${dateLabel(ev)}`,
           body: buildBody(ev.user, ev),
           tag: `ev_${ev.id}`
         });
@@ -89,7 +89,7 @@ export default async function handler(req, res) {
       if (target) {
         try {
           await sendPushToPrefix(prefix, {
-            title: `🗑️ ${target.text}: ${dateLabel(target)}`,
+            title: `🗑️ 삭제: ${dateLabel(target)}`,
             body: buildBody(target.user, target),
             tag: `ev_del_${target.id}`
           });
