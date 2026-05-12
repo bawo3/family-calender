@@ -1865,34 +1865,53 @@
     ['eventInput','eventFrom','eventTo','importantCheck'].forEach(id=>document.getElementById(id).disabled=false);
     document.getElementById('addBtn').disabled=false;
   }
+  // 날짜 label에 인라인 date input 렌더링 (범위선택/수정 모드)
   function updateSelectedLabel(){
-    const label=document.getElementById('selectedDateLabel'),info=document.getElementById('rangeInfo');
-    const dateRow=document.getElementById('editDateRow');
-    const startInp=document.getElementById('editStartDate');
-    const endInp=document.getElementById('editEndDate');
+    const label=document.getElementById('selectedDateLabel');
+    const info=document.getElementById('rangeInfo');
 
     if(!selectedStart){
-      label.textContent='날짜를 선택하세요';info.textContent='';
-      if(!editingEventId) dateRow.style.display='none';
-      return;
+      label.textContent='날짜를 선택하세요'; info.textContent=''; return;
     }
 
-    // 날짜 입력란 값 동기화 (수정 모드 또는 범위 선택 시 표시)
     const isRange=selectedStart!==selectedEnd;
-    if(editingEventId||isRange){
-      dateRow.style.display='flex';
-      startInp.value=selectedStart;
-      endInp.value=selectedEnd;
-    } else {
-      if(!editingEventId) dateRow.style.display='none';
-    }
+    const showInline=isRange||!!editingEventId;
 
-    if(isRange){
-      label.textContent=`${selectedStart} ~ ${selectedEnd} 기간 일정`;
-      info.textContent=`총 ${daysBetween(selectedStart,selectedEnd)+1}일 기간 선택됨`;
-    }else{
+    if(showInline){
+      // 이미 생성된 인라인 input이 있으면 값만 갱신 (포커스 유지)
+      const existS=document.getElementById('inlineDateStart');
+      const existE=document.getElementById('inlineDateEnd');
+      if(existS&&existE){
+        if(document.activeElement!==existS) existS.value=selectedStart;
+        if(document.activeElement!==existE) existE.value=selectedEnd;
+      } else {
+        // 인라인 date input 생성
+        const sty='border:none;border-bottom:1px solid var(--accent,#3498db);background:transparent;color:inherit;font-size:inherit;font-weight:inherit;padding:0 2px;cursor:pointer;outline:none;width:120px;';
+        label.innerHTML=`<input type="date" id="inlineDateStart" style="${sty}" value="${selectedStart}"> ~ <input type="date" id="inlineDateEnd" style="${sty}" value="${selectedEnd}"> 기간 일정`;
+
+        document.getElementById('inlineDateStart').addEventListener('change',e=>{
+          const v=e.target.value; if(!v) return;
+          selectedStart=v;
+          if(selectedEnd<v){ selectedEnd=v; const el=document.getElementById('inlineDateEnd'); if(el) el.value=v; }
+          _syncRangeInfo(); renderCalendar(); renderEventList();
+        });
+        document.getElementById('inlineDateEnd').addEventListener('change',e=>{
+          const v=e.target.value; if(!v) return;
+          selectedEnd=v;
+          if(selectedStart>v){ selectedStart=v; const el=document.getElementById('inlineDateStart'); if(el) el.value=v; }
+          _syncRangeInfo(); renderCalendar(); renderEventList();
+        });
+      }
+      _syncRangeInfo();
+    } else {
       label.textContent=`${selectedStart} 일정`;
       info.textContent='단일 날짜 선택됨';
+    }
+
+    function _syncRangeInfo(){
+      info.textContent=selectedStart!==selectedEnd
+        ?`총 ${daysBetween(selectedStart,selectedEnd)+1}일 기간 선택됨`
+        :'단일 날짜 선택됨';
     }
   }
 
@@ -2465,37 +2484,11 @@
     document.getElementById('annivTypeAnniversary').checked=true;
     document.getElementById('annivTypeAnniversary').dispatchEvent(new Event('change'));
   });
-  // 수정 모드 날짜 직접 입력 핸들러
-  document.getElementById('editStartDate').addEventListener('change',e=>{
-    selectedStart=e.target.value;
-    if(selectedEnd<selectedStart){ selectedEnd=selectedStart; document.getElementById('editEndDate').value=selectedStart; }
-    updateSelectedLabel(); renderCalendar();
-  });
-  document.getElementById('editEndDate').addEventListener('change',e=>{
-    selectedEnd=e.target.value;
-    if(selectedEnd<selectedStart){ selectedStart=selectedEnd; document.getElementById('editStartDate').value=selectedEnd; }
-    updateSelectedLabel(); renderCalendar();
-  });
   document.getElementById('noticeModal').addEventListener('click',e=>{
     if(e.target===document.getElementById('noticeModal'))closeNoticeModal();
   });
   ['eventInput','eventFrom','eventTo'].forEach(id=>{
     document.getElementById(id).addEventListener('keypress',e=>{if(e.key==='Enter')addEvent();});
-  });
-  // 날짜 입력란 변경 시 selectedStart/End 업데이트 → 캘린더 드래그 반영
-  document.getElementById('editStartDate').addEventListener('change',e=>{
-    const v=e.target.value; if(!v) return;
-    selectedStart=v;
-    // 시작일이 종료일보다 늦으면 종료일을 시작일로 맞춤
-    if(selectedEnd&&v>selectedEnd) selectedEnd=v;
-    updateSelectedLabel(); renderCalendar(); renderEventList();
-  });
-  document.getElementById('editEndDate').addEventListener('change',e=>{
-    const v=e.target.value; if(!v) return;
-    selectedEnd=v;
-    // 종료일이 시작일보다 이르면 시작일을 종료일로 맞춤
-    if(selectedStart&&v<selectedStart) selectedStart=v;
-    updateSelectedLabel(); renderCalendar(); renderEventList();
   });
   // 외부 클릭 시 1번째 탭 선택 초기화
   document.addEventListener('click',e=>{
