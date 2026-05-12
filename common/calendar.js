@@ -2230,7 +2230,7 @@
     const banner=document.getElementById('importantBanner');
     const title=document.getElementById('importantBannerTitle');
     if(!banner||!title) return;
-    let lastFire=0;
+    let lastFire=0, titleTouchX=0;
     const toggle=()=>{
       // 모바일에서 touchend → click 두번 발생 방지
       const now=Date.now();
@@ -2239,7 +2239,42 @@
       banner.classList.toggle('collapsed');
     };
     title.addEventListener('click',toggle);
-    title.addEventListener('touchend',e=>{ e.preventDefault(); toggle(); }, {passive:false});
+    title.addEventListener('touchstart',e=>{
+      if(e.touches.length===1) titleTouchX=e.touches[0].clientX;
+    },{passive:true});
+    title.addEventListener('touchend',e=>{
+      // 수평 이동이 30px 이상이면 스와이프로 간주 — 토글하지 않음
+      if(Math.abs(e.changedTouches[0].clientX-titleTouchX)>30) return;
+      e.preventDefault();
+      toggle();
+    },{passive:false});
+  })();
+
+  // 중요 일정 배너 좌우 스와이프 — 다음달/저번달 이동
+  (function setupBannerSwipe(){
+    const banner=document.getElementById('importantBanner');
+    if(!banner) return;
+    let sx=0, sy=0, st=0, tracking=false;
+    banner.addEventListener('touchstart',e=>{
+      if(e.touches.length!==1) return;
+      sx=e.touches[0].clientX; sy=e.touches[0].clientY;
+      st=Date.now(); tracking=true;
+    },{passive:true});
+    banner.addEventListener('touchend',e=>{
+      if(!tracking) return;
+      tracking=false;
+      if(e.changedTouches.length!==1) return;
+      const dx=e.changedTouches[0].clientX-sx;
+      const dy=e.changedTouches[0].clientY-sy;
+      const dt=Date.now()-st;
+      const MIN=60;
+      if(dt>700) return;
+      if(Math.abs(dx)<MIN) return;
+      if(Math.abs(dx)<Math.abs(dy)*1.2) return; // 수직이 더 크면 무시
+      if(dx<0) currentDate.setMonth(currentDate.getMonth()+1);
+      else     currentDate.setMonth(currentDate.getMonth()-1);
+      renderCalendar();
+    },{passive:true});
   })();
 
   // 캘린더 좌우 스와이프 — 다음달/저번달 이동
@@ -2283,12 +2318,13 @@
   });
   document.getElementById('addBtn').addEventListener('click',addEvent);
   document.getElementById('reloadBtn').addEventListener('click',reloadData);
-  // 글자 크기 3단계 순환 — localStorage에 저장
+  // 글자 크기 4단계 순환 — 버튼 클릭 + 핀치 제스처 지원
   (function initZoom(){
     const LS_ZOOM=PREFIX+'_font_zoom';
     const ZOOM_SEQ=['','lg','xl','xxl'];
     const ZOOM_LABELS={'':'🔍1','lg':'🔍2','xl':'🔍3','xxl':'🔍4'};
     let z=localStorage.getItem(LS_ZOOM)||'';
+
     function applyZoom(v){
       document.body.classList.remove('font-lg','font-xl','font-xxl');
       if(v==='lg') document.body.classList.add('font-lg');
@@ -2297,12 +2333,54 @@
       const btn=document.getElementById('zoomBtn');
       if(btn) btn.textContent=ZOOM_LABELS[v]||'🔍1';
     }
-    applyZoom(z);
-    document.getElementById('zoomBtn').addEventListener('click',()=>{
-      z=ZOOM_SEQ[(ZOOM_SEQ.indexOf(z)+1)%4];
+
+    // dir: +1 확대, -1 축소
+    function stepZoom(dir){
+      const idx=ZOOM_SEQ.indexOf(z);
+      z=ZOOM_SEQ[(idx+dir+4)%4];
       localStorage.setItem(LS_ZOOM,z);
       applyZoom(z);
-    });
+    }
+
+    applyZoom(z);
+    document.getElementById('zoomBtn').addEventListener('click',()=>stepZoom(+1));
+
+    // 핀치 제스처 — 두 손가락 벌리면 확대, 오므리면 축소
+    let pinchStart=0, pinchLast=0, isPinching=false;
+    const THRESHOLD=40; // 40px 이상 변해야 단계 변경
+
+    function touchDist(touches){
+      const dx=touches[0].clientX-touches[1].clientX;
+      const dy=touches[0].clientY-touches[1].clientY;
+      return Math.hypot(dx,dy);
+    }
+
+    document.addEventListener('touchstart',e=>{
+      if(e.touches.length===2){
+        pinchStart=touchDist(e.touches);
+        pinchLast=pinchStart;
+        isPinching=true;
+      } else {
+        isPinching=false;
+      }
+    },{passive:true});
+
+    // passive:false 필수 — 브라우저 기본 핀치줌 차단
+    document.addEventListener('touchmove',e=>{
+      if(isPinching && e.touches.length===2){
+        e.preventDefault();
+        pinchLast=touchDist(e.touches);
+      }
+    },{passive:false});
+
+    document.addEventListener('touchend',e=>{
+      if(isPinching && e.touches.length<2){
+        const diff=pinchLast-pinchStart;
+        if(diff>=THRESHOLD) stepZoom(+1);
+        else if(diff<=-THRESHOLD) stepZoom(-1);
+        isPinching=false;
+      }
+    },{passive:true});
   })();
   document.getElementById('alarmBtn').addEventListener('click',toggleNotify);
   document.getElementById('noticeBtn').addEventListener('click',openNoticeModal);

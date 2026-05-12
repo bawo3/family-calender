@@ -29,7 +29,7 @@ export default async function handler(req, res) {
       try {
         await sendPushToPrefix(prefix, {
           title: '📢 새 공지',
-          body: `${n.user} · ${n.text}`,
+          body: `${n.user}: ${n.text}`,
           tag: `nt_${n.id}`
         });
       } catch(e) { console.error('push 전송 실패:', e); }

@@ -9,10 +9,19 @@
 import { isValidPrefix, getJson, setJson, send, allowCors } from './_kv.js';
 import { sendPushToPrefix } from './_push.js';
 
-// 시간 문자열 생성 (from === to 이면 빈 문자열)
-function timeStr(from, to) {
-  if (!from || String(from) === String(to)) return '';
-  return ` · ${from}시${to ? `~${to}시까지` : '~'}`;
+// 날짜 레이블 (하루면 날짜만, 기간이면 ~ 표시)
+function dateLabel(ev) {
+  return ev.startDate === ev.endDate ? ev.startDate : `${ev.startDate} ~ ${ev.endDate}`;
+}
+
+// 알림 2번째 줄용 body: "이름: 일정내용 [중요도] [시간]"
+function buildBody(user, ev) {
+  const parts = [ev.text];
+  if (ev.important) parts.push('⭐중요');
+  if (ev.from && String(ev.from) !== String(ev.to)) {
+    parts.push(`${ev.from}시~${ev.to}시까지`);
+  }
+  return `${user}: ${parts.join(' ')}`;
 }
 
 export default async function handler(req, res) {
@@ -34,10 +43,9 @@ export default async function handler(req, res) {
       events.push(ev);
       await setJson(prefix, 'events', events);
       try {
-        const dateLabel = ev.startDate === ev.endDate ? ev.startDate : `${ev.startDate} ~ ${ev.endDate}`;
         await sendPushToPrefix(prefix, {
-          title: `📅 새 일정: ${ev.text}`,
-          body: `${ev.user} · ${dateLabel}${ev.important ? ' ⭐중요' : ''}${timeStr(ev.from, ev.to)}`,
+          title: `📅 ${ev.text}: ${dateLabel(ev)}`,
+          body: buildBody(ev.user, ev),
           tag: `ev_${ev.id}`
         });
       } catch(e) { console.error('push 전송 실패:', e); }
@@ -56,10 +64,9 @@ export default async function handler(req, res) {
       events[idx] = ev;
       await setJson(prefix, 'events', events);
       try {
-        const dateLabel = ev.startDate === ev.endDate ? ev.startDate : `${ev.startDate} ~ ${ev.endDate}`;
         await sendPushToPrefix(prefix, {
-          title: `✏️ 일정 수정: ${ev.text}`,
-          body: `${ev.user} · ${dateLabel}${ev.important ? ' ⭐중요' : ''}${timeStr(ev.from, ev.to)}`,
+          title: `✏️ ${ev.text}: ${dateLabel(ev)}`,
+          body: buildBody(ev.user, ev),
           tag: `ev_${ev.id}`
         });
       } catch(e) { console.error('push 전송 실패:', e); }
@@ -81,10 +88,9 @@ export default async function handler(req, res) {
       await setJson(prefix, 'events', events.filter(e => e.id !== id));
       if (target) {
         try {
-          const dateLabel = target.startDate === target.endDate ? target.startDate : `${target.startDate} ~ ${target.endDate}`;
           await sendPushToPrefix(prefix, {
-            title: `🗑️ 일정 삭제: ${target.text}`,
-            body: `${target.user} · ${dateLabel}${target.important ? ' ⭐중요' : ''}`,
+            title: `🗑️ ${target.text}: ${dateLabel(target)}`,
+            body: buildBody(target.user, target),
             tag: `ev_del_${target.id}`
           });
         } catch(e) { console.error('push 전송 실패:', e); }

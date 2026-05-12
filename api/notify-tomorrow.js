@@ -54,9 +54,12 @@ export default async function handler(req, res) {
 
       for (const ev of tomorrowEvents) {
         try {
+          const bodyParts = [ev.text];
+          if (ev.important) bodyParts.push('⭐중요');
+          if (ev.from && String(ev.from) !== String(ev.to)) bodyParts.push(`${ev.from}시~${ev.to}시까지`);
           await sendPushToPrefix(prefix, {
-            title: `📅 (내일일정) ${ev.text}`,
-            body: `${ev.user}${ev.important ? ' ⭐중요' : ''}${timeStr(ev.from, ev.to)}`,
+            title: `📅 ${ev.text}: ${tomorrow} (내일)`,
+            body: `${ev.user}: ${bodyParts.join(' ')}`,
             tag: `tomorrow_ev_${ev.id}`
           });
           totalSent++;
