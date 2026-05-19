@@ -303,12 +303,14 @@
     <button class="nav-btn" id="nextBtn">▶</button>
     <button class="nav-btn" id="todayBtn">오늘</button>
     <button class="nav-btn view-toggle-btn" id="viewToggleBtn" title="월별/주별 보기 전환">📅 월</button>
-    <button class="nav-btn compact-toggle-btn" id="compactToggleBtn" title="텍스트/점 표시 전환 (월별 보기에서만 동작)">💬 텍스트</button>
+    <button class="nav-btn compact-toggle-btn" id="compactToggleBtn" title="텍스트/점 표시 전환 (월별 보기에서만 동작)">📍 점</button>
   </div>
-  <div class="weekdays">
-    <div class="sun">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div class="sat">토</div>
+  <div class="cal-grid-wrap" id="calGridWrap">
+    <div class="weekdays">
+      <div class="sun">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div class="sat">토</div>
+    </div>
+    <div class="days" id="daysGrid"></div>
   </div>
-  <div class="days" id="daysGrid"></div>
   <div class="event-panel">
     <div class="multi-select-row">
       <label class="multi-toggle">
@@ -321,8 +323,10 @@
     <div class="event-form">
       <span class="time-label">시작</span>
       <select id="eventFrom" class="hour-select" disabled></select>
+      <select id="eventFromMin" class="min-select" disabled></select>
       <span class="time-label">~ 종료</span>
       <select id="eventTo" class="hour-select" disabled></select>
+      <select id="eventToMin" class="min-select" disabled></select>
       <input type="text" id="eventInput" placeholder="일정 내용을 입력하세요" disabled>
       <label class="important-check"><input type="checkbox" id="importantCheck" disabled> ⭐ 중요</label>
       <div id="editDateRow" class="edit-date-row" style="display:none;">
@@ -494,7 +498,8 @@
   let viewMode='month';
   let weekAnchor=new Date(); // 주별 보기 기준일 (이 날짜가 포함된 주를 표시)
   // 컴팩트(점) 모드 — true면 텍스트 바 대신 사용자 색 점 표시 (월별 보기 전용)
-  let compactMode=false;
+  // 기본값은 점 모드 — 한눈에 어느 날 일정 있는지 확인용
+  let compactMode=true;
   let editingEventId=null; // 수정 중인 일정 ID (null=추가 모드)
   let _pastEventsCollapsed=true; // 이번달 지난 일정 접힘 상태
   let _monthEventsCollapsed=true; // 이번달 진행 예정 일정 접힘 상태
@@ -725,19 +730,37 @@
     }
     return false;
   }
+  // 시간 문자열(HH:MM 또는 단일 시간) → 분 합산값 (-1: 미지정)
+  function timeToMin(v){
+    if(v===''||v==null) return -1;
+    const s=String(v);
+    if(s.includes(':')){
+      const [h,m]=s.split(':').map(x=>parseInt(x,10)||0);
+      return h*60+m;
+    }
+    return parseInt(s,10)*60;
+  }
   function formatTimeRange(f,t){
     if(String(f)===String(t)) return ''; // 시작=종료 동일하면 시간 표시 안 함
+    // HH:MM 형식으로 표시 (구버전 시간만 입력된 경우도 처리)
     const fmt=v=>{
       if(v===''||v==null)return'';
       const s=String(v);
-      const h=parseInt(s.includes(':')?s.split(':')[0]:s,10);
-      return String(h).padStart(2,'0')+'시';
+      let h, m;
+      if(s.includes(':')){
+        [h,m]=s.split(':').map(x=>parseInt(x,10)||0);
+      } else {
+        h=parseInt(s,10)||0; m=0;
+      }
+      return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
     };
-    return(f&&t)?`${fmt(f)}~${fmt(t)}까지`:f?`${fmt(f)}~`:t?`~${fmt(t)}까지`:'';
+    return(f&&t)?`${fmt(f)}~${fmt(t)}`:f?`${fmt(f)}~`:t?`~${fmt(t)}`:'';
   }
   function fillHourOptions(){
     const fromSel=document.getElementById('eventFrom');
     const toSel=document.getElementById('eventTo');
+    const fromMinSel=document.getElementById('eventFromMin');
+    const toMinSel=document.getElementById('eventToMin');
 
     // 시작 시간: 00~23시
     fromSel.innerHTML=Array.from({length:24},(_,h)=>
@@ -748,10 +771,18 @@
     function buildToOpts(minH){
       return Array.from({length:25-minH},(_,i)=>{
         const h=minH+i;
-        return `<option value="${h}">${String(h).padStart(2,'0')}시까지</option>`;
+        return `<option value="${h}">${String(h).padStart(2,'0')}시</option>`;
       }).join('');
     }
     toSel.innerHTML=buildToOpts(0);
+
+    // 분 옵션 — 10분 단위 (00, 10, 20, 30, 40, 50)
+    const minOpts=Array.from({length:6},(_,i)=>{
+      const m=i*10;
+      return `<option value="${m}">${String(m).padStart(2,'0')}분</option>`;
+    }).join('');
+    fromMinSel.innerHTML=minOpts;
+    toMinSel.innerHTML=minOpts;
 
     // 시작 시간 바꾸면 종료 시간 옵션을 시작시간 이상~24시로 업데이트
     fromSel.addEventListener('change',()=>{
@@ -1366,7 +1397,7 @@
     document.getElementById('selectedColorText').textContent='선택되지 않음';
     document.getElementById('loginBtn').disabled=true;
     const evIn=document.getElementById('eventInput');evIn.disabled=true;evIn.value='';
-    ['eventFrom','eventTo'].forEach(id=>{const el=document.getElementById(id);el.disabled=true;el.value='0';});
+    ['eventFrom','eventFromMin','eventTo','eventToMin'].forEach(id=>{const el=document.getElementById(id); if(!el) return; el.disabled=true; el.value='0';});
     document.getElementById('importantCheck').checked=false;
     document.getElementById('importantCheck').disabled=true;
     document.getElementById('addBtn').disabled=true;
@@ -2055,7 +2086,9 @@
   }
 
   function activateInputs(){
-    ['eventInput','eventFrom','eventTo','importantCheck'].forEach(id=>document.getElementById(id).disabled=false);
+    ['eventInput','eventFrom','eventFromMin','eventTo','eventToMin','importantCheck'].forEach(id=>{
+      const el=document.getElementById(id); if(el) el.disabled=false;
+    });
     document.getElementById('addBtn').disabled=false;
   }
   // 날짜 셀 클릭 처리 — 단일/범위/다중 모드에 따라 분기
@@ -2320,8 +2353,22 @@
     }
     selectedStart=ev.startDate; selectedEnd=ev.endDate; tapFirst=null;
     document.getElementById('eventInput').value=ev.text;
-    document.getElementById('eventFrom').value=ev.from||'0';
-    document.getElementById('eventTo').value=ev.to||'0';
+    // 저장값 → 시/분 분리 (구버전 "9" 같은 시간만 입력도 처리)
+    const parseTime=(v)=>{
+      if(v===''||v==null) return ['0','0'];
+      const s=String(v);
+      if(s.includes(':')){
+        const [h,m]=s.split(':');
+        return [String(parseInt(h,10)||0), String(parseInt(m,10)||0)];
+      }
+      return [String(parseInt(s,10)||0), '0'];
+    };
+    const [fH,fM]=parseTime(ev.from);
+    const [tH,tM]=parseTime(ev.to);
+    document.getElementById('eventFrom').value=fH;
+    document.getElementById('eventFromMin').value=fM;
+    document.getElementById('eventTo').value=tH;
+    document.getElementById('eventToMin').value=tM;
     document.getElementById('importantCheck').checked=!!ev.important;
     // editingEventId 먼저 설정해야 updateSelectedLabel에서 dateRow 표시됨
     editingEventId=ev.id;
@@ -2353,8 +2400,7 @@
     const cancelBtn=document.getElementById('editCancelBtn');
     if(cancelBtn)cancelBtn.style.display='none';
     document.getElementById('eventInput').value='';
-    document.getElementById('eventFrom').value='0';
-    document.getElementById('eventTo').value='0';
+    ['eventFrom','eventFromMin','eventTo','eventToMin'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='0';});
     document.getElementById('importantCheck').checked=false;
     document.getElementById('editDateRow').style.display='none';
     document.getElementById('daysGrid').classList.remove('editing-mode');
@@ -2376,14 +2422,22 @@
   }
   async function addEvent(){
     const input=document.getElementById('eventInput'),text=input.value.trim();
-    const from=document.getElementById('eventFrom').value;
-    const to  =document.getElementById('eventTo').value;
+    // 시/분 합쳐 "HH:MM" 형식으로 저장
+    const fH=document.getElementById('eventFrom').value;
+    const fM=document.getElementById('eventFromMin').value||'0';
+    const tH=document.getElementById('eventTo').value;
+    const tM=document.getElementById('eventToMin').value||'0';
+    const from=`${fH}:${fM}`;
+    const to  =`${tH}:${tM}`;
     const important=document.getElementById('importantCheck').checked;
     // 다중 선택 모드: 선택된 각 날짜에 개별 일정 생성
     if(multiSelectMode && multiSelectDates.size>0 && !editingEventId){
       if(!text) return;
-      if(from && to && parseInt(to,10)<parseInt(from,10)){
-        alert('종료 시간이 시작 시간보다 빠를 수 없습니다.');return;
+      if(from && to){
+        const fMin=timeToMin(from), tMin=timeToMin(to);
+        if(tMin<fMin){
+          alert('종료 시간이 시작 시간보다 빠를 수 없습니다.');return;
+        }
       }
       const addBtn=document.getElementById('addBtn');addBtn.disabled=true;
       const dates=[...multiSelectDates].sort();
@@ -2393,8 +2447,7 @@
           await apiAddEvent(newEv);
         }
         input.value='';
-        document.getElementById('eventFrom').value='0';
-        document.getElementById('eventTo').value='0';
+        ['eventFrom','eventFromMin','eventTo','eventToMin'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='0';});
         document.getElementById('importantCheck').checked=false;
         // 등록 후 선택 유지 — 같은 날짜에 추가하지 않도록 비움
         multiSelectDates.clear();
@@ -2408,8 +2461,13 @@
       return;
     }
     if(!text||!selectedStart||!selectedEnd)return;
-    if(selectedStart===selectedEnd&&from&&to&&parseInt(to,10)<parseInt(from,10)){
-      alert('종료 시간이 시작 시간보다 빠를 수 없습니다.');return;
+    if(selectedStart===selectedEnd){
+      if(from && to){
+        const fMin=timeToMin(from), tMin=timeToMin(to);
+        if(tMin<fMin){
+          alert('종료 시간이 시작 시간보다 빠를 수 없습니다.');return;
+        }
+      }
     }
     const addBtn=document.getElementById('addBtn');addBtn.disabled=true;
     try{
@@ -2422,8 +2480,7 @@
         const newEv={id:makeId(),user:currentUser,color:currentUserColor,text,startDate:selectedStart,endDate:selectedEnd,from,to,important};
         await apiAddEvent(newEv);
         input.value='';
-        document.getElementById('eventFrom').value='0';
-        document.getElementById('eventTo').value='0';
+        ['eventFrom','eventFromMin','eventTo','eventToMin'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='0';});
         document.getElementById('importantCheck').checked=false;
         tapFirst=null;
       }
@@ -2674,6 +2731,9 @@
       if(dt>700) return;       // 너무 느린 동작 무시
       if(Math.abs(dx)<MIN) return;
       if(Math.abs(dx)<Math.abs(dy)*1.2) return; // 수직이 더 크면 스크롤로 간주
+      // 가로 스크롤 가능 상태(텍스트 모드 좁은 화면 등)면 가로 스크롤 우선 — 월/주 이동 막음
+      const wrap=document.getElementById('calGridWrap');
+      if(wrap && wrap.scrollWidth > wrap.clientWidth + 1) return;
       // 스와이프 인식 — 후속 click 무시
       swiped=true;
       setTimeout(()=>{swiped=false;},400);
@@ -2715,10 +2775,16 @@
     renderCalendar();
   });
   // 텍스트/점 모드 전환 (월별 보기에서만 효과)
+  function applyCompactClass(){
+    const wrap=document.getElementById('calGridWrap');
+    if(wrap) wrap.classList.toggle('text-mode', !compactMode);
+  }
+  applyCompactClass();
   document.getElementById('compactToggleBtn').addEventListener('click',(e)=>{
     e.stopPropagation();
     compactMode = !compactMode;
     document.getElementById('compactToggleBtn').textContent = compactMode ? '📍 점' : '💬 텍스트';
+    applyCompactClass();
     renderCalendar();
   });
   // 글자 크기 4단계 순환 — 버튼 클릭 전용 (핀치는 아래 initPinchZoom에서 별도 처리)

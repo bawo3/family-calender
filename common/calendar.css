@@ -117,7 +117,13 @@ body.dark .b-section-gap{border-top-color:rgba(255,255,255,0.08);}
 body.dark .b-item.in-progress{background:rgba(46,204,113,0.15);}
 .b-time{font-size:10px;color:var(--text-secondary);margin-left:2px;}
 
-/* 요일/날짜 그리드 */
+/* 요일/날짜 그리드 — 스크롤 래퍼 */
+.cal-grid-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.cal-grid-wrap::-webkit-scrollbar{height:6px;}
+.cal-grid-wrap::-webkit-scrollbar-thumb{background:rgba(128,128,128,0.3);border-radius:3px;}
+/* 텍스트 모드 — 셀 최소 너비 강제, 좁은 화면이면 가로 스크롤 (주별 보기는 제외) */
+.cal-grid-wrap.text-mode .weekdays,
+.cal-grid-wrap.text-mode .days:not(.week-view){min-width:560px;}
 .weekdays{display:grid;grid-template-columns:repeat(7,1fr);background:var(--weekday-bg);border-radius:6px;overflow:hidden;}
 .weekdays div{padding:10px;text-align:center;font-weight:bold;font-size:14px;color:var(--text-primary);}
 .weekdays .sun{color:#e74c3c;} .weekdays .sat{color:#3498db;}
@@ -217,6 +223,10 @@ body.dark .b-item.in-progress{background:rgba(46,204,113,0.15);}
 .event-form{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;}
 .event-form input[type="text"]{flex:1;min-width:180px;padding:8px;border:1px solid var(--border);border-radius:4px;font-size:14px;background:var(--input-bg);color:var(--text-base);}
 .event-form select.hour-select{padding:7px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--input-bg);color:var(--text-base);min-width:64px;}
+.event-form select.min-select{padding:7px 6px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--input-bg);color:var(--text-base);min-width:56px;}
+@media(max-width:480px){
+  .event-form select.min-select{min-width:50px;padding:6px 4px;font-size:12px;}
+}
 .event-form .time-label{font-size:12px;color:var(--text-secondary);}
 .event-form button{background:#27ae60;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;}
 .event-form button:hover{background:#1e8449;}
