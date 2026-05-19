@@ -321,10 +321,10 @@
     <h2 id="selectedDateLabel">날짜를 선택하세요</h2>
     <div class="range-info" id="rangeInfo"></div>
     <div class="event-form">
-      <span class="time-label">시작</span>
+      <span class="time-label">시간</span>
       <select id="eventFrom" class="hour-select" disabled></select>
       <select id="eventFromMin" class="min-select" disabled></select>
-      <span class="time-label">~ 종료</span>
+      <span class="time-label">~</span>
       <select id="eventTo" class="hour-select" disabled></select>
       <select id="eventToMin" class="min-select" disabled></select>
       <input type="text" id="eventInput" placeholder="일정 내용을 입력하세요" disabled>
