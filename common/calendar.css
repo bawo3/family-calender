@@ -144,6 +144,26 @@ body.dark .b-item.in-progress{background:rgba(46,204,113,0.15);}
 .event-bar.bar-mid{border-radius:0;margin-left:-6px;margin-right:-6px;padding:0;}
 .event-bar.bar-end{border-radius:0 4px 4px 0;margin-left:-6px;margin-right:-6px;padding:0;}
 .event-bar.bar-span{border-radius:4px;margin-left:-6px;margin-right:-6px;padding:0 8px;}
+/* 단일일 이벤트 — 2줄까지 줄바꿈 허용 (모바일 가독성) */
+.event-bar.bar-single{white-space:normal;line-height:1.25;height:auto;min-height:18px;max-height:34px;padding:1px 5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word;}
+.event-bar .bar-star{margin-right:1px;font-size:10px;}
+.event-bar .bar-time{font-size:10px;opacity:0.8;margin-left:2px;white-space:nowrap;}
+.event-bar.bar-more{opacity:0.85;font-style:italic;}
+/* 점(dot) 모드 — 작은 컬러 점, 중요 이벤트는 ⭐ */
+.day-dots{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;align-items:center;}
+.day-dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0;box-shadow:0 0 0 1px rgba(0,0,0,0.06) inset;}
+.day-dot.anniv-dot{box-shadow:0 0 0 1.5px #fff inset, 0 0 0 2.5px rgba(232,67,147,0.5);}
+.day-star{font-size:11px;line-height:1;display:inline-block;flex-shrink:0;}
+.day-dot-more{font-size:9px;color:var(--text-secondary);font-weight:600;margin-left:2px;}
+@media(max-width:480px){
+  .day-dot{width:8px;height:8px;}
+  .day-star{font-size:10px;}
+  /* 모바일 텍스트 모드 — 셀 살짝 키워서 2줄 잘 보이도록 */
+  .day{min-height:115px;}
+  .event-bar{font-size:10px;}
+  .event-bar.bar-single{max-height:32px;}
+  .event-bar .bar-time{font-size:9px;}
+}
 
 /* 일정 패널 */
 .event-panel{margin-top:20px;padding:16px;background:var(--panel-bg);border-radius:8px;border:1px solid var(--border);}

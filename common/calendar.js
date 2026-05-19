@@ -303,6 +303,7 @@
     <button class="nav-btn" id="nextBtn">▶</button>
     <button class="nav-btn" id="todayBtn">오늘</button>
     <button class="nav-btn view-toggle-btn" id="viewToggleBtn" title="월별/주별 보기 전환">📅 월</button>
+    <button class="nav-btn compact-toggle-btn" id="compactToggleBtn" title="텍스트/점 표시 전환 (월별 보기에서만 동작)">💬 텍스트</button>
   </div>
   <div class="weekdays">
     <div class="sun">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div class="sat">토</div>
@@ -492,6 +493,8 @@
   // 보기 모드 — 'month'(달력 그리드) / 'week'(현재 주 세로 리스트, 모바일 가독성용)
   let viewMode='month';
   let weekAnchor=new Date(); // 주별 보기 기준일 (이 날짜가 포함된 주를 표시)
+  // 컴팩트(점) 모드 — true면 텍스트 바 대신 사용자 색 점 표시 (월별 보기 전용)
+  let compactMode=false;
   let editingEventId=null; // 수정 중인 일정 ID (null=추가 모드)
   let _pastEventsCollapsed=true; // 이번달 지난 일정 접힘 상태
   let _monthEventsCollapsed=true; // 이번달 진행 예정 일정 접힘 상태
@@ -1977,34 +1980,69 @@
         const k=`${ev.startDate}|${ev.endDate}|${ev.text}`;
         if(seen.has(k))return false;seen.add(k);return true;
       });
-      deduped.slice(0,3).forEach(ev=>{
-        const isMulti=ev.startDate!==ev.endDate;
-        let barClass;
-        if(!isMulti){barClass='bar-single';}
-        else{
-          const isFirst=dateStr===ev.startDate||wd===0;
-          const isLast=dateStr===ev.endDate||wd===6;
-          if(isFirst&&isLast)barClass='bar-span';
-          else if(isFirst)barClass='bar-start';
-          else if(isLast)barClass='bar-end';
-          else barClass='bar-mid';
-        }
-        const bar=document.createElement('div');
-        bar.className=`event-bar ${barClass}${ev.isAnniversary?' anniv-bar':''}`;
-        bar.style.background=ev.color||'#95a5a6';
-        if(barClass==='bar-single'||barClass==='bar-start'||barClass==='bar-span'){
-          const ts=formatTimeRange(ev.from,ev.to);
-          if(ev.isAnniversary){
-            bar.textContent=ev.text; // 기념일은 텍스트만 표시 (user 접두사 없음)
+      if(compactMode){
+        // 점 모드 — 작은 컬러 점으로 표시. ⭐ 중요 이벤트는 별 아이콘
+        const dotsWrap=document.createElement('div');
+        dotsWrap.className='day-dots';
+        const SHOW_DOTS=10;
+        deduped.slice(0,SHOW_DOTS).forEach(ev=>{
+          const tip=ev.isAnniversary?ev.text:`${ev.user||''}: ${ev.text}`;
+          if(ev.important){
+            const star=document.createElement('span');
+            star.className='day-star';
+            star.style.color=ev.color||'#e74c3c';
+            star.textContent='⭐';
+            star.title=tip;
+            dotsWrap.appendChild(star);
           } else {
-            bar.innerHTML=`${ev.important?'⭐ ':''}${ev.user}: ${ev.text}${ts?` <span style="font-size:10px;opacity:0.75"> ${ts}</span>`:''}`;
+            const dot=document.createElement('span');
+            dot.className='day-dot'+(ev.isAnniversary?' anniv-dot':'');
+            dot.style.background=ev.color||'#95a5a6';
+            dot.title=tip;
+            dotsWrap.appendChild(dot);
           }
+        });
+        if(deduped.length>SHOW_DOTS){
+          const more=document.createElement('span');
+          more.className='day-dot-more';
+          more.textContent=`+${deduped.length-SHOW_DOTS}`;
+          dotsWrap.appendChild(more);
         }
-        cell.appendChild(bar);
-      });
-      if(deduped.length>3){
-        const more=document.createElement('div');more.className='event-bar bar-single';
-        more.style.background='#95a5a6';more.textContent=`+${deduped.length-3}개 더`;cell.appendChild(more);
+        cell.appendChild(dotsWrap);
+      } else {
+        // 텍스트 모드 — 단일일은 2줄 래핑, 다일은 가로 스팬. '이름:' 접두사는 색으로 대체
+        deduped.slice(0,3).forEach(ev=>{
+          const isMulti=ev.startDate!==ev.endDate;
+          let barClass;
+          if(!isMulti){barClass='bar-single';}
+          else{
+            const isFirst=dateStr===ev.startDate||wd===0;
+            const isLast=dateStr===ev.endDate||wd===6;
+            if(isFirst&&isLast)barClass='bar-span';
+            else if(isFirst)barClass='bar-start';
+            else if(isLast)barClass='bar-end';
+            else barClass='bar-mid';
+          }
+          const bar=document.createElement('div');
+          bar.className=`event-bar ${barClass}${ev.isAnniversary?' anniv-bar':''}`;
+          bar.style.background=ev.color||'#95a5a6';
+          // tooltip은 항상 — '이름: 내용 (시간)'
+          const ts=formatTimeRange(ev.from,ev.to);
+          if(barClass==='bar-single'||barClass==='bar-start'||barClass==='bar-span'){
+            if(ev.isAnniversary){
+              bar.textContent=ev.text;
+            } else {
+              // 가독성 향상 — 이름 접두사 제거(색으로 구분), ⭐는 유지
+              bar.innerHTML=`${ev.important?'<span class="bar-star">⭐</span>':''}${ev.text}${ts?` <span class="bar-time">${ts}</span>`:''}`;
+            }
+          }
+          bar.title=ev.isAnniversary?ev.text:`${ev.user||''}: ${ev.text}${ts?` (${ts})`:''}`;
+          cell.appendChild(bar);
+        });
+        if(deduped.length>3){
+          const more=document.createElement('div');more.className='event-bar bar-single bar-more';
+          more.style.background='#95a5a6';more.textContent=`+${deduped.length-3}개 더`;cell.appendChild(more);
+        }
       }
       cell.addEventListener('click',(e)=>{
         e.stopPropagation();
@@ -2674,6 +2712,13 @@
     document.getElementById('viewToggleBtn').textContent = viewMode==='month' ? '📅 월' : '📆 주';
     // 주별 보기 진입 시 기준일을 오늘로 맞춤
     if(viewMode==='week') weekAnchor=new Date(currentDate);
+    renderCalendar();
+  });
+  // 텍스트/점 모드 전환 (월별 보기에서만 효과)
+  document.getElementById('compactToggleBtn').addEventListener('click',(e)=>{
+    e.stopPropagation();
+    compactMode = !compactMode;
+    document.getElementById('compactToggleBtn').textContent = compactMode ? '📍 점' : '💬 텍스트';
     renderCalendar();
   });
   // 글자 크기 4단계 순환 — 버튼 클릭 전용 (핀치는 아래 initPinchZoom에서 별도 처리)
