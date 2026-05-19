@@ -122,7 +122,9 @@ body.dark .b-item.in-progress{background:rgba(46,204,113,0.15);}
 .weekdays div{padding:10px;text-align:center;font-weight:bold;font-size:14px;color:var(--text-primary);}
 .weekdays .sun{color:#e74c3c;} .weekdays .sat{color:#3498db;}
 .days{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:4px;}
-.day{min-height:100px;background:var(--day-bg);border-radius:6px;padding:6px;cursor:pointer;transition:background 0.15s;border:1px solid transparent;overflow:hidden;}
+.day{min-height:100px;background:var(--day-bg);border-radius:6px;padding:6px;cursor:pointer;transition:background 0.15s;border:1px solid transparent;overflow:visible;}
+/* 그리드 컨테이너에서 캘린더 경계 밖으로 글자가 흘러나가지 않도록 클립 */
+.days{overflow:hidden;}
 .day:hover{background:var(--day-hover);}
 .day.empty{background:transparent;cursor:default;}
 .day.today{border-color:var(--accent);background:var(--today-bg);}
@@ -140,10 +142,14 @@ body.dark .b-item.in-progress{background:rgba(46,204,113,0.15);}
 
 /* 이벤트 바 (기간 일정) */
 .event-bar{color:#fff;font-size:11px;height:18px;line-height:18px;margin-top:2px;padding:0 5px;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.event-bar.bar-start{border-radius:4px 0 0 4px;margin-left:-6px;margin-right:-6px;padding-left:8px;}
-.event-bar.bar-mid{border-radius:0;margin-left:-6px;margin-right:-6px;padding:0;}
-.event-bar.bar-end{border-radius:0 4px 4px 0;margin-left:-6px;margin-right:-6px;padding:0;}
+/* 다일 이벤트 바 — 셀 사이 4px gap을 메우기 위해 좌우 margin을 -10px로 확장 (인접 바와 시각적으로 연결) */
+.event-bar.bar-start{border-radius:4px 0 0 4px;margin-left:-6px;margin-right:-10px;padding-left:8px;}
+.event-bar.bar-mid{border-radius:0;margin-left:-10px;margin-right:-10px;padding:0;}
+.event-bar.bar-end{border-radius:0 4px 4px 0;margin-left:-10px;margin-right:-6px;padding:0;}
 .event-bar.bar-span{border-radius:4px;margin-left:-6px;margin-right:-6px;padding:0 8px;}
+/* 다일 이벤트 시작 바 — 글자가 다음 셀로 흘러서 1줄로 이어져 보이도록 */
+.event-bar.bar-start{white-space:nowrap;overflow:visible;text-overflow:clip;position:relative;z-index:5;}
+.event-bar.bar-start .bar-time{display:inline-block;}
 /* 단일일 이벤트 — 2줄까지 줄바꿈 허용 (모바일 가독성) */
 .event-bar.bar-single{white-space:normal;line-height:1.25;height:auto;min-height:18px;max-height:34px;padding:1px 5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word;}
 .event-bar .bar-star{margin-right:1px;font-size:10px;}
