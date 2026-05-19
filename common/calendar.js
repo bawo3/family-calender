@@ -22,6 +22,11 @@
   const PREFIX  = cfg.prefix || 'default';
   const TITLE   = cfg.title  || '📅 캘린더';
   const API     = '/api';
+  // 관리자 비밀번호 — index.html(관리자 페이지)과 동일한 localStorage 키 사용
+  // 기본값 '681100' (관리자 페이지에서 변경 시 자동 반영)
+  const ADMIN_PWD_KEY = 'admin_password';
+  const ADMIN_PWD_DEFAULT = '681100';
+  const getAdminPwd = () => localStorage.getItem(ADMIN_PWD_KEY) || ADMIN_PWD_DEFAULT;
   // 자동 로그인 정보(디바이스 한정)는 localStorage 에 보관
   const KEY_CURRENT = `${PREFIX}_current_user`;
 
@@ -2493,6 +2498,15 @@
   }
   async function deleteEvent(id){
     const target=cache.events.find(ev=>ev.id===id);if(!target)return;
+    // 본인 일정이 아니면 관리자 비밀번호 확인
+    if(target.user!==currentUser){
+      const pwd=prompt(`[${target.user}]님이 등록한 일정입니다.\n삭제하려면 관리자 비밀번호를 입력하세요:`);
+      if(pwd===null) return; // 취소
+      if(pwd!==getAdminPwd()){
+        alert('비밀번호가 일치하지 않습니다.');
+        return;
+      }
+    }
     const who=target.user!==currentUser?`[${target.user}]님이 등록한 `:'';
     if(!confirm(`${who}"${target.text}" 일정을 삭제하시겠습니까?`))return;
     try{
