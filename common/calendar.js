@@ -302,12 +302,19 @@
     <span class="month-label" id="monthLabel"></span>
     <button class="nav-btn" id="nextBtn">▶</button>
     <button class="nav-btn" id="todayBtn">오늘</button>
+    <button class="nav-btn view-toggle-btn" id="viewToggleBtn" title="월별/주별 보기 전환">📅 월</button>
   </div>
   <div class="weekdays">
     <div class="sun">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div class="sat">토</div>
   </div>
   <div class="days" id="daysGrid"></div>
   <div class="event-panel">
+    <div class="multi-select-row">
+      <label class="multi-toggle">
+        <input type="checkbox" id="multiSelectToggle">
+        <span class="multi-toggle-text">📌 다중 선택 (월·수·금처럼 여러 날짜 따로 고르기)</span>
+      </label>
+    </div>
     <h2 id="selectedDateLabel">날짜를 선택하세요</h2>
     <div class="range-info" id="rangeInfo"></div>
     <div class="event-form">
@@ -479,8 +486,15 @@
   let currentUser=null, currentUserColor=null, currentUserSkin='dark';
   let selectedStart=null, selectedEnd=null;
   let tapFirst=null; // 1번째 탭 날짜 (null=미선택, string=2번째 탭 대기 중)
+  // 다중 선택 모드 — 켜면 클릭한 날짜를 개별로 토글 (월/수/금 같은 패턴 가능)
+  let multiSelectMode=false;
+  let multiSelectDates=new Set(); // 선택된 날짜 문자열 집합
+  // 보기 모드 — 'month'(달력 그리드) / 'week'(현재 주 세로 리스트, 모바일 가독성용)
+  let viewMode='month';
+  let weekAnchor=new Date(); // 주별 보기 기준일 (이 날짜가 포함된 주를 표시)
   let editingEventId=null; // 수정 중인 일정 ID (null=추가 모드)
   let _pastEventsCollapsed=true; // 이번달 지난 일정 접힘 상태
+  let _monthEventsCollapsed=true; // 이번달 진행 예정 일정 접힘 상태
   let editingAnnivId=null; // 수정 중인 기념일 ID (null=추가 모드)
 
   // 메모리 캐시 — DB 호출 결과를 보관해서 렌더 함수는 동기적으로 동작
@@ -1341,6 +1355,8 @@
     localStorage.removeItem(KEY_CURRENT);
     currentUser=currentUserColor=null;currentUserSkin='dark';
     selectedStart=selectedEnd=null;selectedColor=null;selectedSkin='dark';
+    multiSelectMode=false; multiSelectDates.clear();
+    const mst=document.getElementById('multiSelectToggle'); if(mst) mst.checked=false;
     document.getElementById('nameInput').value='';
     document.querySelectorAll('.color-cell').forEach(c=>c.classList.remove('active'));
     document.getElementById('selectedSwatch').style.background='#bdc3c7';
@@ -1675,19 +1691,29 @@
     const annivBannerEvs=generateAnniversaryVirtualEventsForRange(viewMonthStart, viewMonthEnd);
     const allWithAnniv=[...all, ...annivBannerEvs];
 
-    // 섹션 1: 진행 중인 일정 (항상 표시 — 오늘이 시작일~종료일 사이)
+    // 이번주 끝(일요일) 문자열 계산 — 한국 주 기준(월~일)
+    const wd=nowD.getDay(); // 0=일,1=월...6=토
+    const daysToSun=wd===0?0:7-wd;
+    const weekEndD=new Date(nowD.getFullYear(),nowD.getMonth(),nowD.getDate()+daysToSun);
+    const weekEndStr=formatDate(weekEndD.getFullYear(),weekEndD.getMonth(),weekEndD.getDate());
+
+    // 섹션 1: 오늘 일정 (오늘이 startDate~endDate 사이)
     const inProgressEvs=allWithAnniv
       .filter(ev=>ev.startDate<=today && ev.endDate>=today)
       .sort((a,b)=>a.endDate.localeCompare(b.endDate));
 
-    let upcomingMonthEvs=[], pastMonthEvs=[], otherMonthEvs=[];
+    let thisWeekEvs=[], upcomingMonthEvs=[], pastMonthEvs=[], otherMonthEvs=[];
 
     if(isCurrentMonth){
-      // 섹션 2: 이번달 진행 예정 (startDate > today, 이번달 내)
-      upcomingMonthEvs=allWithAnniv
-        .filter(ev=>ev.startDate>today && ev.startDate>=viewMonthStart && ev.startDate<=viewMonthEnd)
+      // 섹션 2: 이번주 일정 (내일~이번주 일요일)
+      thisWeekEvs=allWithAnniv
+        .filter(ev=>ev.startDate>today && ev.startDate<=weekEndStr)
         .sort((a,b)=>a.startDate.localeCompare(b.startDate));
-      // 섹션 3: 이번달 지난 일정 (endDate < today, 이번달 내) — 기념일 가상이벤트 제외
+      // 섹션 3: 이번달 진행 예정 (이번주 일요일 이후 ~ 이번달 말)
+      upcomingMonthEvs=allWithAnniv
+        .filter(ev=>ev.startDate>weekEndStr && ev.startDate>=viewMonthStart && ev.startDate<=viewMonthEnd)
+        .sort((a,b)=>a.startDate.localeCompare(b.startDate));
+      // 섹션 4: 이번달 지난 일정 (endDate < today, 이번달 내) — 기념일 가상이벤트 제외
       pastMonthEvs=all
         .filter(ev=>ev.endDate<today && ev.endDate>=viewMonthStart && ev.endDate<=viewMonthEnd)
         .sort((a,b)=>a.startDate.localeCompare(b.startDate));
@@ -1698,7 +1724,7 @@
         .sort((a,b)=>a.startDate.localeCompare(b.startDate));
     }
 
-    if(!inProgressEvs.length && !upcomingMonthEvs.length && !pastMonthEvs.length && !otherMonthEvs.length){
+    if(!inProgressEvs.length && !thisWeekEvs.length && !upcomingMonthEvs.length && !pastMonthEvs.length && !otherMonthEvs.length){
       banner.classList.add('hidden');return;
     }
     banner.classList.remove('hidden');list.innerHTML='';
@@ -1740,10 +1766,50 @@
       prevSection=true;
     };
 
-    addSection('📍 현재 일정 진행중', inProgressEvs, true);
+    addSection('📍 오늘 일정', inProgressEvs, true);
+    addSection('📆 이번주 일정', thisWeekEvs, false);
 
     if(isCurrentMonth){
-      addSection('✨ 이번달 진행 예정 일정', upcomingMonthEvs, false);
+      // 이번달 진행 예정 — 접힘 상태 유지 (3건만 표시)
+      if(upcomingMonthEvs.length){
+        const gapCls=prevSection?' b-section-gap':'';
+        const mHeaderEl=document.createElement('div');
+        mHeaderEl.className='b-section-title b-past-header'+gapCls;
+        const mToggleSpan=document.createElement('span');
+        mToggleSpan.className='b-past-toggle';
+        mToggleSpan.textContent=_monthEventsCollapsed?'▶':'▼';
+        mHeaderEl.append('✨ 이번달 일정 ', mToggleSpan);
+        list.appendChild(mHeaderEl);
+
+        const mWrap=document.createElement('div');
+        mWrap.className='b-past-items';
+        const SHOW=3;
+        const showItems=_monthEventsCollapsed?upcomingMonthEvs.slice(0,SHOW):upcomingMonthEvs;
+        showItems.forEach(ev=>mWrap.appendChild(makeItem(ev,false)));
+        // 더보기 버튼
+        let mMoreBtn=null;
+        if(_monthEventsCollapsed && upcomingMonthEvs.length>SHOW){
+          mMoreBtn=document.createElement('div');
+          mMoreBtn.className='b-more-btn';
+          mMoreBtn.textContent=`▼ ${upcomingMonthEvs.length-SHOW}건 더보기`;
+          mWrap.appendChild(mMoreBtn);
+        } else if(!_monthEventsCollapsed && upcomingMonthEvs.length>SHOW){
+          mMoreBtn=document.createElement('div');
+          mMoreBtn.className='b-more-btn';
+          mMoreBtn.textContent='▲ 접기';
+          mWrap.appendChild(mMoreBtn);
+        }
+        list.appendChild(mWrap);
+
+        const toggleMonth=()=>{
+          _monthEventsCollapsed=!_monthEventsCollapsed;
+          renderImportantBanner();
+        };
+        mHeaderEl.addEventListener('click',toggleMonth);
+        if(mMoreBtn) mMoreBtn.addEventListener('click',toggleMonth);
+        prevSection=true;
+      }
+
       // 이번달 지난 일정 — 접힘 상태 유지, 빈 경우 미표시
       if(pastMonthEvs.length){
         const gapCls=prevSection?' b-section-gap':'';
@@ -1773,7 +1839,103 @@
     }
   }
 
+  // 주별 보기 — 7일을 세로 리스트로 표시 (모바일 가독성 우선)
+  function renderWeekView(){
+    const grid=document.getElementById('daysGrid');
+    grid.innerHTML='';
+    grid.classList.add('week-view');
+    // 요일 헤더 숨김 (각 행에 요일 표시되므로 중복 방지)
+    const wdEl=document.querySelector('.weekdays'); if(wdEl) wdEl.style.display='none';
+    // 기준일의 그 주 일요일~토요일 계산
+    const base=new Date(weekAnchor);
+    const sunday=new Date(base);
+    sunday.setDate(base.getDate() - base.getDay());
+    const saturday=new Date(sunday);
+    saturday.setDate(sunday.getDate()+6);
+    // 헤더 라벨: 5/18 ~ 5/24 (둘째 주) 형식
+    const sM=sunday.getMonth()+1, sD=sunday.getDate();
+    const eM=saturday.getMonth()+1, eD=saturday.getDate();
+    document.getElementById('monthLabel').textContent=`${sunday.getFullYear()}년 ${sM}/${sD} ~ ${eM}/${eD}`;
+    const today=todayStr();
+    const events=loadEvents();
+    const WEEKDAYS=['일','월','화','수','목','금','토'];
+    for(let i=0;i<7;i++){
+      const d=new Date(sunday); d.setDate(sunday.getDate()+i);
+      const dateStr=formatDate(d.getFullYear(),d.getMonth(),d.getDate());
+      const wd=d.getDay();
+      const row=document.createElement('div');
+      row.className='day week-day';
+      row.dataset.date=dateStr;
+      if(wd===0) row.classList.add('sun');
+      if(wd===6) row.classList.add('sat');
+      const holidayName=getHoliday(dateStr);
+      if(holidayName){ row.classList.add('sun'); row.classList.add('holiday'); }
+      if(dateStr===today) row.classList.add('today');
+      // 선택 상태 표시 — 월별 보기와 동일 규칙
+      if(multiSelectMode){
+        if(multiSelectDates.has(dateStr)) row.classList.add('selected');
+      } else if(selectedStart && selectedEnd){
+        const lo=minDate(selectedStart,selectedEnd), hi=maxDate(selectedStart,selectedEnd);
+        if(selectedStart===selectedEnd && dateStr===selectedStart) row.classList.add('selected');
+        else if(dateStr===lo||dateStr===hi) row.classList.add('range-edge');
+        else if(dateStr>lo && dateStr<hi) row.classList.add('range');
+      }
+      // 좌측 — 요일 + 일자
+      const head=document.createElement('div');
+      head.className='wd-head';
+      head.innerHTML=`<div class="wd-name">${WEEKDAYS[wd]}</div><div class="wd-num">${d.getDate()}</div>`;
+      row.appendChild(head);
+      // 우측 — 이벤트 목록
+      const body=document.createElement('div');
+      body.className='wd-body';
+      if(holidayName){
+        const hl=document.createElement('div');
+        hl.className='wd-holiday';
+        hl.textContent=`🇰🇷 ${holidayName}`;
+        body.appendChild(hl);
+      }
+      // 일반 이벤트 + 기념일 가상 이벤트 합산 (중복 제거)
+      const annivDayEvs=generateAnniversaryVirtualEventsForRange(dateStr,dateStr);
+      const dayEvs=[...events.filter(ev=>dateInRange(dateStr,ev.startDate,ev.endDate)), ...annivDayEvs];
+      const seen=new Set();
+      const deduped=dayEvs.filter(ev=>{
+        const k=`${ev.startDate}|${ev.endDate}|${ev.text}`;
+        if(seen.has(k))return false;seen.add(k);return true;
+      });
+      deduped.forEach(ev=>{
+        const item=document.createElement('div');
+        item.className='wd-event';
+        item.style.borderLeftColor=ev.color||'#95a5a6';
+        const ts=formatTimeRange(ev.from,ev.to);
+        if(ev.isAnniversary){
+          const tag=ev.anniversaryType==='birthday'?'🎂':'💕';
+          item.innerHTML=`<span class="wd-ev-tag" style="background:${ev.color||'#e84393'}">${tag}</span><span class="wd-ev-text">${ev.text}</span>`;
+        } else {
+          const imp=ev.important?'⭐ ':'';
+          item.innerHTML=`<span class="wd-ev-tag" style="background:${ev.color||'#95a5a6'}">${ev.user}</span><span class="wd-ev-text">${imp}${ev.text}</span>${ts?`<span class="wd-ev-time">⏰ ${ts}</span>`:''}`;
+        }
+        body.appendChild(item);
+      });
+      if(!deduped.length && !holidayName){
+        const e=document.createElement('div'); e.className='wd-empty'; e.textContent='—';
+        body.appendChild(e);
+      }
+      row.appendChild(body);
+      row.addEventListener('click',(e)=>{
+        e.stopPropagation();
+        if(editingEventId) return;
+        handleDayClick(dateStr);
+      });
+      grid.appendChild(row);
+    }
+    renderImportantBanner();
+  }
+
   function renderCalendar(){
+    if(viewMode==='week'){ renderWeekView(); return; }
+    // 주별 보기에서 월별로 돌아오면 요일 헤더 / 그리드 클래스 원복
+    const wdEl=document.querySelector('.weekdays'); if(wdEl) wdEl.style.display='';
+    const gridEl0=document.getElementById('daysGrid'); if(gridEl0) gridEl0.classList.remove('week-view');
     const year=currentDate.getFullYear(),month=currentDate.getMonth();
     document.getElementById('monthLabel').textContent=`${year}년 ${month+1}월`;
     const firstDay=new Date(year,month,1).getDay(),lastDate=new Date(year,month+1,0).getDate();
@@ -1790,7 +1952,10 @@
       const holidayName=getHoliday(dateStr);
       if(holidayName){ cell.classList.add('sun'); cell.classList.add('holiday'); }
       if(dateStr===today)cell.classList.add('today');
-      if(selectedStart&&selectedEnd){
+      // 다중 선택 모드면 selected 클래스만 (개별 토글)
+      if(multiSelectMode){
+        if(multiSelectDates.has(dateStr)) cell.classList.add('selected');
+      } else if(selectedStart&&selectedEnd){
         const lo=minDate(selectedStart,selectedEnd),hi=maxDate(selectedStart,selectedEnd);
         if(selectedStart===selectedEnd&&dateStr===selectedStart)cell.classList.add('selected');
         else if(dateStr===lo||dateStr===hi)cell.classList.add('range-edge');
@@ -1844,17 +2009,7 @@
       cell.addEventListener('click',(e)=>{
         e.stopPropagation();
         if(editingEventId) return; // 수정 중에는 달력 날짜 선택 비활성화
-        if(tapFirst===null){
-          // 1번째 탭: 단일 날짜 선택
-          tapFirst=dateStr;
-          selectedStart=dateStr;selectedEnd=dateStr;
-          activateInputs();updateSelectedLabel();renderCalendar();renderEventList();
-        }else{
-          // 2번째 탭: 범위 확정
-          selectedStart=minDate(tapFirst,dateStr);selectedEnd=maxDate(tapFirst,dateStr);
-          tapFirst=null;
-          activateInputs();updateSelectedLabel();renderCalendar();renderEventList();
-        }
+        handleDayClick(dateStr);
       });
       grid.appendChild(cell);
     }
@@ -1865,10 +2020,75 @@
     ['eventInput','eventFrom','eventTo','importantCheck'].forEach(id=>document.getElementById(id).disabled=false);
     document.getElementById('addBtn').disabled=false;
   }
+  // 날짜 셀 클릭 처리 — 단일/범위/다중 모드에 따라 분기
+  function handleDayClick(dateStr){
+    if(multiSelectMode){
+      // 다중 모드: 클릭한 날짜를 토글 (이미 있으면 빼고, 없으면 추가)
+      if(multiSelectDates.has(dateStr)) multiSelectDates.delete(dateStr);
+      else multiSelectDates.add(dateStr);
+      // 폼 입력 활성화를 위해 selectedStart/End 도 동기화
+      if(multiSelectDates.size>0){
+        const sorted=[...multiSelectDates].sort();
+        selectedStart=sorted[0]; selectedEnd=sorted[sorted.length-1];
+      }else{
+        selectedStart=null; selectedEnd=null;
+      }
+      tapFirst=null;
+      if(selectedStart) activateInputs();
+      updateSelectedLabel(); renderCalendar(); renderEventList();
+      return;
+    }
+    // 기존 단일/범위 모드
+    if(tapFirst===null){
+      // 1번째 탭: 단일 날짜 선택
+      tapFirst=dateStr;
+      selectedStart=dateStr; selectedEnd=dateStr;
+      activateInputs(); updateSelectedLabel(); renderCalendar(); renderEventList();
+    }else{
+      // 2번째 탭: 범위 확정
+      selectedStart=minDate(tapFirst,dateStr); selectedEnd=maxDate(tapFirst,dateStr);
+      tapFirst=null;
+      activateInputs(); updateSelectedLabel(); renderCalendar(); renderEventList();
+    }
+  }
   // 날짜 label에 인라인 date input 렌더링 (범위선택/수정 모드)
   function updateSelectedLabel(){
     const label=document.getElementById('selectedDateLabel');
     const info=document.getElementById('rangeInfo');
+
+    // 다중 선택 모드는 별도 처리 — 선택된 날짜 칩 목록 표시
+    if(multiSelectMode && !editingEventId){
+      if(multiSelectDates.size===0){
+        label.textContent='날짜를 선택하세요 (다중)'; info.textContent='클릭하여 여러 날짜를 개별 선택할 수 있어요'; return;
+      }
+      const sorted=[...multiSelectDates].sort();
+      const WD=['일','월','화','수','목','금','토'];
+      // 라벨에 선택된 날짜 칩 표시 — 클릭하면 해당 날짜 해제
+      label.innerHTML='';
+      const wrap=document.createElement('div');
+      wrap.className='multi-chips-wrap';
+      sorted.forEach(ds=>{
+        const [y,m,d]=ds.split('-').map(Number);
+        const chip=document.createElement('span');
+        chip.className='multi-chip';
+        chip.innerHTML=`${m}/${d}<small>(${WD[new Date(y,m-1,d).getDay()]})</small> <span class="multi-chip-x">×</span>`;
+        chip.title='클릭하여 해제';
+        chip.addEventListener('click',()=>{
+          multiSelectDates.delete(ds);
+          if(multiSelectDates.size>0){
+            const s=[...multiSelectDates].sort();
+            selectedStart=s[0]; selectedEnd=s[s.length-1];
+          } else {
+            selectedStart=null; selectedEnd=null;
+          }
+          updateSelectedLabel(); renderCalendar(); renderEventList();
+        });
+        wrap.appendChild(chip);
+      });
+      label.appendChild(wrap);
+      info.textContent=`${multiSelectDates.size}개 날짜 선택됨 — 같은 내용으로 일괄 추가됩니다`;
+      return;
+    }
 
     if(!selectedStart){
       label.textContent='날짜를 선택하세요'; info.textContent=''; return;
@@ -1930,18 +2150,41 @@
       const [y,m,d]=s.split('-').map(Number);
       return `${s} (${WEEKDAYS[new Date(y,m-1,d).getDay()]})`;
     };
-    // 사용자 일정 + 기념일 가상 이벤트 매칭
-    const matched=events.filter(ev=>rangesOverlap(ev.startDate,ev.endDate,selectedStart,selectedEnd));
-    const annivMatched=generateAnniversaryVirtualEventsForRange(selectedStart,selectedEnd);
-    // 선택 기간 내 공휴일 수집 (가상 항목으로 리스트에 표시 — 삭제 불가)
-    const [sy,sm,sd]=selectedStart.split('-').map(Number);
-    const [ey,em,ed]=selectedEnd.split('-').map(Number);
-    const startD=new Date(sy,sm-1,sd), endD=new Date(ey,em-1,ed);
-    const holidayItems=[];
-    for(let cur=new Date(startD.getTime()); cur<=endD; cur.setDate(cur.getDate()+1)){
-      const ds=formatDate(cur.getFullYear(),cur.getMonth(),cur.getDate());
-      const name=getHoliday(ds);
-      if(name) holidayItems.push({isHoliday:true, startDate:ds, endDate:ds, text:name, from:0, to:0});
+    // 다중 선택 모드면 각 날짜별로 매칭하여 합집합 처리
+    let matched, annivMatched, holidayItems;
+    if(multiSelectMode && multiSelectDates.size>0 && !editingEventId){
+      const dateList=[...multiSelectDates];
+      // 사용자 일정 — 선택된 날짜 중 어느 하나라도 겹치는 이벤트
+      matched=events.filter(ev=>dateList.some(d=>dateInRange(d,ev.startDate,ev.endDate)));
+      // 기념일 — 선택된 날짜별로 가상 이벤트 생성 (중복 제거)
+      const annivSeen=new Set();
+      annivMatched=[];
+      dateList.forEach(d=>{
+        generateAnniversaryVirtualEventsForRange(d,d).forEach(a=>{
+          const k=`${a.startDate}|${a.text}`;
+          if(!annivSeen.has(k)){ annivSeen.add(k); annivMatched.push(a); }
+        });
+      });
+      // 공휴일 — 선택된 날짜만
+      holidayItems=[];
+      dateList.forEach(ds=>{
+        const name=getHoliday(ds);
+        if(name) holidayItems.push({isHoliday:true, startDate:ds, endDate:ds, text:name, from:0, to:0});
+      });
+    } else {
+      // 사용자 일정 + 기념일 가상 이벤트 매칭
+      matched=events.filter(ev=>rangesOverlap(ev.startDate,ev.endDate,selectedStart,selectedEnd));
+      annivMatched=generateAnniversaryVirtualEventsForRange(selectedStart,selectedEnd);
+      // 선택 기간 내 공휴일 수집 (가상 항목으로 리스트에 표시 — 삭제 불가)
+      const [sy,sm,sd]=selectedStart.split('-').map(Number);
+      const [ey,em,ed]=selectedEnd.split('-').map(Number);
+      const startD=new Date(sy,sm-1,sd), endD=new Date(ey,em-1,ed);
+      holidayItems=[];
+      for(let cur=new Date(startD.getTime()); cur<=endD; cur.setDate(cur.getDate()+1)){
+        const ds=formatDate(cur.getFullYear(),cur.getMonth(),cur.getDate());
+        const name=getHoliday(ds);
+        if(name) holidayItems.push({isHoliday:true, startDate:ds, endDate:ds, text:name, from:0, to:0});
+      }
     }
     // 통합 정렬 — 날짜순, 같은 날이면 공휴일→기념일→일반 순, 그 다음 시간순
     const allItems=[...holidayItems, ...annivMatched, ...matched].sort((a,b)=>{
@@ -2032,7 +2275,11 @@
   // 8) 일정 추가/수정/삭제 (async)
   // -----------------------------------------
   function startEdit(ev){
-    // 폼에 기존 데이터 채우기
+    // 폼에 기존 데이터 채우기 — 수정 모드는 다중 선택과 충돌하므로 강제로 끔
+    if(multiSelectMode){
+      multiSelectMode=false; multiSelectDates.clear();
+      const mst=document.getElementById('multiSelectToggle'); if(mst) mst.checked=false;
+    }
     selectedStart=ev.startDate; selectedEnd=ev.endDate; tapFirst=null;
     document.getElementById('eventInput').value=ev.text;
     document.getElementById('eventFrom').value=ev.from||'0';
@@ -2091,10 +2338,38 @@
   }
   async function addEvent(){
     const input=document.getElementById('eventInput'),text=input.value.trim();
-    if(!text||!selectedStart||!selectedEnd)return;
     const from=document.getElementById('eventFrom').value;
     const to  =document.getElementById('eventTo').value;
     const important=document.getElementById('importantCheck').checked;
+    // 다중 선택 모드: 선택된 각 날짜에 개별 일정 생성
+    if(multiSelectMode && multiSelectDates.size>0 && !editingEventId){
+      if(!text) return;
+      if(from && to && parseInt(to,10)<parseInt(from,10)){
+        alert('종료 시간이 시작 시간보다 빠를 수 없습니다.');return;
+      }
+      const addBtn=document.getElementById('addBtn');addBtn.disabled=true;
+      const dates=[...multiSelectDates].sort();
+      try{
+        for(const ds of dates){
+          const newEv={id:makeId(),user:currentUser,color:currentUserColor,text,startDate:ds,endDate:ds,from,to,important};
+          await apiAddEvent(newEv);
+        }
+        input.value='';
+        document.getElementById('eventFrom').value='0';
+        document.getElementById('eventTo').value='0';
+        document.getElementById('importantCheck').checked=false;
+        // 등록 후 선택 유지 — 같은 날짜에 추가하지 않도록 비움
+        multiSelectDates.clear();
+        selectedStart=null; selectedEnd=null;
+        updateSelectedLabel(); renderCalendar(); renderEventList();
+      }catch(e){
+        alert('일정 추가 실패: '+e.message);console.error(e);
+      }finally{
+        addBtn.disabled=false;
+      }
+      return;
+    }
+    if(!text||!selectedStart||!selectedEnd)return;
     if(selectedStart===selectedEnd&&from&&to&&parseInt(to,10)<parseInt(from,10)){
       alert('종료 시간이 시작 시간보다 빠를 수 없습니다.');return;
     }
@@ -2272,13 +2547,21 @@
       catch(e){ console.error('skin save failed', e); }
     }
   });
+  // prev/next — 주별 보기면 7일 단위, 월별이면 1개월 단위 이동
+  function navStep(dir){
+    if(viewMode==='week'){
+      weekAnchor.setDate(weekAnchor.getDate()+7*dir);
+      currentDate=new Date(weekAnchor);
+    } else {
+      currentDate.setMonth(currentDate.getMonth()+dir);
+    }
+    renderCalendar();
+  }
   document.getElementById('prevBtn').addEventListener('click',(e)=>{
-    e.stopPropagation(); // 월 이동 시 tapFirst 초기화 방지
-    currentDate.setMonth(currentDate.getMonth()-1);renderCalendar();
+    e.stopPropagation(); navStep(-1);
   });
   document.getElementById('nextBtn').addEventListener('click',(e)=>{
-    e.stopPropagation();
-    currentDate.setMonth(currentDate.getMonth()+1);renderCalendar();
+    e.stopPropagation(); navStep(+1);
   });
 
   // 중요 일정 배너 — 헤더 클릭/탭으로 접기/펼치기 (페이지 로드 시 항상 열림)
@@ -2327,9 +2610,7 @@
       if(dt>700) return;
       if(Math.abs(dx)<MIN) return;
       if(Math.abs(dx)<Math.abs(dy)*1.2) return; // 수직이 더 크면 무시
-      if(dx<0) currentDate.setMonth(currentDate.getMonth()+1);
-      else     currentDate.setMonth(currentDate.getMonth()-1);
-      renderCalendar();
+      navStep(dx<0?+1:-1);
     },{passive:true});
   })();
 
@@ -2358,10 +2639,8 @@
       // 스와이프 인식 — 후속 click 무시
       swiped=true;
       setTimeout(()=>{swiped=false;},400);
-      if(dx<0) currentDate.setMonth(currentDate.getMonth()+1); // 좌로 스와이프 → 다음달
-      else     currentDate.setMonth(currentDate.getMonth()-1); // 우로 스와이프 → 저번달
-      // 선택된 날짜/탭 상태는 그대로 유지 (prev/next 버튼과 동일 동작)
-      renderCalendar();
+      // 좌로 스와이프 → 다음, 우로 스와이프 → 이전 (월별=1개월, 주별=7일)
+      navStep(dx<0?+1:-1);
     },{passive:true});
     // 스와이프 직후의 click 이벤트가 day cell 선택을 발생시키지 않도록 캡처 단계에서 차단
     grid.addEventListener('click',e=>{
@@ -2370,10 +2649,33 @@
   })();
   document.getElementById('todayBtn').addEventListener('click',(e)=>{
     e.stopPropagation();
-    currentDate=new Date();renderCalendar();
+    currentDate=new Date(); weekAnchor=new Date(); renderCalendar();
   });
   document.getElementById('addBtn').addEventListener('click',addEvent);
   document.getElementById('reloadBtn').addEventListener('click',reloadData);
+  // 다중 선택 토글
+  document.getElementById('multiSelectToggle').addEventListener('change',(e)=>{
+    // 수정 모드 중에는 전환 금지 (체크 상태 원복)
+    if(editingEventId){
+      alert('수정 모드 중에는 다중 선택을 전환할 수 없어요.');
+      e.target.checked=multiSelectMode;
+      return;
+    }
+    multiSelectMode=e.target.checked;
+    // 모드 전환 시 기존 선택 모두 해제 (헷갈림 방지)
+    multiSelectDates.clear();
+    selectedStart=null; selectedEnd=null; tapFirst=null;
+    updateSelectedLabel(); renderCalendar(); renderEventList();
+  });
+  // 월/주 보기 전환
+  document.getElementById('viewToggleBtn').addEventListener('click',(e)=>{
+    e.stopPropagation();
+    viewMode = viewMode==='month' ? 'week' : 'month';
+    document.getElementById('viewToggleBtn').textContent = viewMode==='month' ? '📅 월' : '📆 주';
+    // 주별 보기 진입 시 기준일을 오늘로 맞춤
+    if(viewMode==='week') weekAnchor=new Date(currentDate);
+    renderCalendar();
+  });
   // 글자 크기 4단계 순환 — 버튼 클릭 전용 (핀치는 아래 initPinchZoom에서 별도 처리)
   (function initZoom(){
     const LS_ZOOM=PREFIX+'_font_zoom';
