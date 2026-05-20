@@ -455,7 +455,7 @@
           <input type="radio" name="annivType" value="anniversary" id="annivTypeAnniversary">💕 기념일
         </label>
       </div>
-      <input type="text" class="anniv-input" id="annivName" placeholder="이름 또는 설명 (예: 혜주, 우리 기념일)" maxlength="30">
+      <input type="text" class="anniv-input" id="annivName" placeholder="이름 또는 설명 (예: 우리 기념일)" maxlength="30">
       <input type="date" class="anniv-input" id="annivDate">
       <label class="anniv-check-label" id="annivLunarLabel">
         <input type="checkbox" id="annivLunar">🌙 음력으로도 표시
@@ -2050,6 +2050,13 @@
               bar.appendChild(s);
             }
             cbars.appendChild(bar);
+          } else if(ev.isAnniversary){
+            // 생일은 🎂, 기념일은 💕 이모지로 표시
+            const ic=document.createElement('span');
+            ic.className='day-anniv-ic';
+            ic.textContent = ev.anniversaryType==='birthday' ? '🎂' : '💕';
+            ic.title=tip;
+            dotsWrap.appendChild(ic);
           } else if(ev.important){
             const star=document.createElement('span');
             star.className='day-star';
@@ -2059,7 +2066,7 @@
             dotsWrap.appendChild(star);
           } else {
             const dot=document.createElement('span');
-            dot.className='day-dot'+(ev.isAnniversary?' anniv-dot':'');
+            dot.className='day-dot';
             dot.style.background=ev.color||'#95a5a6';
             dot.title=tip;
             dotsWrap.appendChild(dot);

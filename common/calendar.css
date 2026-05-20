@@ -166,6 +166,10 @@ body.dark .b-item.in-progress{background:rgba(46,204,113,0.15);}
 .day-dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0;box-shadow:0 0 0 1px rgba(0,0,0,0.06) inset;}
 .day-dot.anniv-dot{box-shadow:0 0 0 1.5px #fff inset, 0 0 0 2.5px rgba(232,67,147,0.5);}
 .day-star{font-size:11px;line-height:1;display:inline-block;flex-shrink:0;}
+.day-anniv-ic{font-size:12px;line-height:1;display:inline-block;flex-shrink:0;}
+@media(max-width:480px){
+  .day-anniv-ic{font-size:11px;}
+}
 .day-dot-more{font-size:9px;color:var(--text-secondary);font-weight:600;margin-left:2px;}
 /* 점 모드 — 다일 이벤트는 가는 색띠로 다음 셀까지 연결되게 */
 .day-cbars{display:flex;flex-direction:column;gap:3px;margin-top:6px;}
