@@ -2017,13 +2017,40 @@
         if(seen.has(k))return false;seen.add(k);return true;
       });
       if(compactMode){
-        // 점 모드 — 작은 컬러 점으로 표시. ⭐ 중요 이벤트는 별 아이콘
+        // 점 모드
+        // - 다일 이벤트: 가는 색띠로 다음 셀까지 연결 (cbar-start/mid/end/span)
+        // - 단일일 이벤트: 컬러 점 / 중요는 ⭐
+        const SHOW_DOTS=10;
+        const cbars=document.createElement('div');
+        cbars.className='day-cbars';
         const dotsWrap=document.createElement('div');
         dotsWrap.className='day-dots';
-        const SHOW_DOTS=10;
-        deduped.slice(0,SHOW_DOTS).forEach(ev=>{
+        let drawn=0;
+        deduped.forEach(ev=>{
+          if(drawn>=SHOW_DOTS) return;
           const tip=ev.isAnniversary?ev.text:`${ev.user||''}: ${ev.text}`;
-          if(ev.important){
+          const isMulti=ev.startDate!==ev.endDate && !ev.isAnniversary;
+          if(isMulti){
+            // 다일 — 가는 색띠
+            const isFirst=dateStr===ev.startDate||wd===0;
+            const isLast=dateStr===ev.endDate||wd===6;
+            let cls;
+            if(isFirst&&isLast)cls='cbar-span';
+            else if(isFirst)cls='cbar-start';
+            else if(isLast)cls='cbar-end';
+            else cls='cbar-mid';
+            const bar=document.createElement('div');
+            bar.className=`day-cbar ${cls}`;
+            bar.style.background=ev.color||'#95a5a6';
+            bar.title=tip;
+            // ⭐ 중요 표시는 시작 셀에만
+            if(ev.important && isFirst){
+              const s=document.createElement('span');
+              s.className='cbar-star'; s.textContent='⭐';
+              bar.appendChild(s);
+            }
+            cbars.appendChild(bar);
+          } else if(ev.important){
             const star=document.createElement('span');
             star.className='day-star';
             star.style.color=ev.color||'#e74c3c';
@@ -2037,14 +2064,16 @@
             dot.title=tip;
             dotsWrap.appendChild(dot);
           }
+          drawn++;
         });
+        if(cbars.childElementCount>0) cell.appendChild(cbars);
+        if(dotsWrap.childElementCount>0) cell.appendChild(dotsWrap);
         if(deduped.length>SHOW_DOTS){
-          const more=document.createElement('span');
+          const more=document.createElement('div');
           more.className='day-dot-more';
           more.textContent=`+${deduped.length-SHOW_DOTS}`;
-          dotsWrap.appendChild(more);
+          cell.appendChild(more);
         }
-        cell.appendChild(dotsWrap);
       } else {
         // 텍스트 모드 — 단일일은 2줄 래핑, 다일은 가로 스팬. '이름:' 접두사는 색으로 대체
         deduped.slice(0,3).forEach(ev=>{
