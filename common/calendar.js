@@ -790,12 +790,23 @@
     toMinSel.innerHTML=minOpts;
 
     // 시작 시간 바꾸면 종료 시간 옵션을 시작시간 이상~24시로 업데이트
+    // - 시작이 00이면 종료도 00 유지 (시간 미설정 상태)
+    // - 시작이 00이 아니면 종료=시작+1시간(24시 캡) 으로 자동 설정 → 주요 일정 배너에 시간 표시됨
     fromSel.addEventListener('change',()=>{
       const fv=parseInt(fromSel.value,10);
       const prevTo=parseInt(toSel.value,10);
       toSel.innerHTML=buildToOpts(fv);
-      // 이전 종료 시간이 새 시작 시간보다 작으면 시작 시간과 동일하게 초기화
-      toSel.value=prevTo>=fv?prevTo:fv;
+      if(fv===0){
+        toSel.value=String(prevTo>=fv?prevTo:fv);
+      } else if(prevTo<=fv){
+        toSel.value=String(Math.min(fv+1,24));
+      } else {
+        toSel.value=String(prevTo);
+      }
+    });
+    // 시작 '분' 바꾸면 종료 '분'도 동일하게 따라감 (사용자가 종료 분을 별도로 바꾸면 거기서부터는 유지)
+    fromMinSel.addEventListener('change',()=>{
+      toMinSel.value=fromMinSel.value;
     });
   }
   function minDate(a,b){return a<b?a:b;} function maxDate(a,b){return a>b?a:b;}
