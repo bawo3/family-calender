@@ -511,7 +511,7 @@
   let editingAnnivId=null; // 수정 중인 기념일 ID (null=추가 모드)
 
   // 메모리 캐시 — DB 호출 결과를 보관해서 렌더 함수는 동기적으로 동작
-  const cache = { events:[], users:{}, allUsers:{}, notices:[], anniversaries:[] };
+  const cache = { events:[], users:{}, allUsers:{}, notices:[], anniversaries:[], recurring:[] };
 
   // localStorage 폴백 모드 (API/KV 미연결 시 자동 전환)
   let localMode = false;
@@ -553,6 +553,12 @@
     if(localMode){ cache.anniversaries = lsGet(LS_ANNIVERSARIES, []); return; }
     cache.anniversaries = await fetchJSON(`${API}/anniversaries?prefix=${encodeURIComponent(PREFIX)}`);
   }
+  async function refreshRecurring(){
+    if(localMode){ cache.recurring = lsGet(`${PREFIX}_ls_recurring`, []); return; }
+    try{
+      cache.recurring = await fetchJSON(`${API}/recurring?prefix=${encodeURIComponent(PREFIX)}`);
+    }catch(e){ cache.recurring = []; }
+  }
   async function refreshAll(){
     if(localMode){
       cache.events        = lsGet(LS_EVENTS,  []);
@@ -560,9 +566,10 @@
       cache.allUsers      = cache.users;
       cache.notices       = lsGet(LS_NOTICES, []);
       cache.anniversaries = lsGet(LS_ANNIVERSARIES, []);
+      cache.recurring     = lsGet(`${PREFIX}_ls_recurring`, []);
       return;
     }
-    await Promise.all([refreshEvents(), refreshUsers(), refreshNotices(), refreshAnniversaries()]);
+    await Promise.all([refreshEvents(), refreshUsers(), refreshNotices(), refreshAnniversaries(), refreshRecurring()]);
     cache.allUsers = cache.users; // 같은 캘린더 사용자만 사용
   }
 
@@ -1008,6 +1015,74 @@
       }
     }
     return result;
+  }
+
+  // -----------------------------------------
+  // 반복 일정 → 가상 이벤트 생성
+  //   recurring: {freq, days, dayOfMonth, startDate, endDate, from, to, ...}
+  //   범위 [startStr, endStr] 안의 모든 반복 발생일을 가상 이벤트로 반환
+  // -----------------------------------------
+  function generateRecurringVirtualEventsForRange(startStr, endStr){
+    const result = [];
+    const list = cache.recurring || [];
+    if(!list.length) return result;
+
+    const dayMap = {sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6};
+
+    for(const r of list){
+      if(!r.startDate || !r.endDate) continue;
+      // 범위 + 반복 기간 교집합
+      const rangeStart = r.startDate > startStr ? r.startDate : startStr;
+      const rangeEnd   = r.endDate   < endStr   ? r.endDate   : endStr;
+      if(rangeStart > rangeEnd) continue;
+
+      const sDate = new Date(rangeStart + 'T00:00:00');
+      const eDate = new Date(rangeEnd + 'T00:00:00');
+
+      if(r.freq === 'daily'){
+        for(let d = new Date(sDate); d <= eDate; d.setDate(d.getDate()+1)){
+          result.push(makeVirtualRecurring(r, d));
+        }
+      } else if(r.freq === 'weekly'){
+        const targetDays = (r.days||[]).map(x=>dayMap[x]).filter(n=>typeof n==='number');
+        if(!targetDays.length) continue;
+        for(let d = new Date(sDate); d <= eDate; d.setDate(d.getDate()+1)){
+          if(targetDays.includes(d.getDay())) result.push(makeVirtualRecurring(r, d));
+        }
+      } else if(r.freq === 'monthly'){
+        const dom = parseInt(r.dayOfMonth);
+        if(!dom) continue;
+        // 시작 월부터 종료 월까지 dayOfMonth 발생
+        let cur = new Date(sDate.getFullYear(), sDate.getMonth(), 1);
+        const last = new Date(eDate.getFullYear(), eDate.getMonth(), 1);
+        while(cur <= last){
+          const last_day = new Date(cur.getFullYear(), cur.getMonth()+1, 0).getDate();
+          const day = Math.min(dom, last_day);
+          const candidate = new Date(cur.getFullYear(), cur.getMonth(), day);
+          const ds = formatDate(candidate.getFullYear(), candidate.getMonth(), candidate.getDate());
+          if(ds >= rangeStart && ds <= rangeEnd){
+            result.push(makeVirtualRecurring(r, candidate));
+          }
+          cur.setMonth(cur.getMonth()+1);
+        }
+      }
+    }
+    return result;
+  }
+
+  function makeVirtualRecurring(r, dateObj){
+    const ds = formatDate(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+    return {
+      isRecurring: true,
+      recurringId: r.id,
+      id: `rec_${r.id}_${ds}`,
+      text: `🔁 ${r.text}`,
+      startDate: ds, endDate: ds,
+      from: r.from || '', to: r.to || '',
+      color: r.color || '#888',
+      user: r.user || '반복',
+      important: false
+    };
   }
 
   // -----------------------------------------
@@ -1739,7 +1814,9 @@
 
     // 기념일 가상 이벤트 (뷰 달 전체)
     const annivBannerEvs=generateAnniversaryVirtualEventsForRange(viewMonthStart, viewMonthEnd);
-    const allWithAnniv=[...all, ...annivBannerEvs];
+    // 반복 일정 가상 이벤트 (뷰 달 전체)
+    const recurBannerEvs=generateRecurringVirtualEventsForRange(viewMonthStart, viewMonthEnd);
+    const allWithAnniv=[...all, ...annivBannerEvs, ...recurBannerEvs];
 
     // 이번주 끝(일요일) 문자열 계산 — 한국 주 기준(월~일)
     const wd=nowD.getDay(); // 0=일,1=월...6=토
@@ -1946,7 +2023,8 @@
       }
       // 일반 이벤트 + 기념일 가상 이벤트 합산 (중복 제거)
       const annivDayEvs=generateAnniversaryVirtualEventsForRange(dateStr,dateStr);
-      const dayEvs=[...events.filter(ev=>dateInRange(dateStr,ev.startDate,ev.endDate)), ...annivDayEvs];
+      const recurDayEvs=generateRecurringVirtualEventsForRange(dateStr,dateStr);
+      const dayEvs=[...events.filter(ev=>dateInRange(dateStr,ev.startDate,ev.endDate)), ...annivDayEvs, ...recurDayEvs];
       const seen=new Set();
       const deduped=dayEvs.filter(ev=>{
         const k=`${ev.startDate}|${ev.endDate}|${ev.text}`;
@@ -2021,7 +2099,8 @@
 
       // 일반 이벤트 + 기념일 가상 이벤트 합산
       const annivDayEvs=generateAnniversaryVirtualEventsForRange(dateStr,dateStr);
-      const dayEvs=[...events.filter(ev=>dateInRange(dateStr,ev.startDate,ev.endDate)), ...annivDayEvs];
+      const recurDayEvs=generateRecurringVirtualEventsForRange(dateStr,dateStr);
+      const dayEvs=[...events.filter(ev=>dateInRange(dateStr,ev.startDate,ev.endDate)), ...annivDayEvs, ...recurDayEvs];
       const seen=new Set();
       const deduped=dayEvs.filter(ev=>{
         const k=`${ev.startDate}|${ev.endDate}|${ev.text}`;
@@ -2066,6 +2145,13 @@
             const ic=document.createElement('span');
             ic.className='day-anniv-ic';
             ic.textContent = ev.anniversaryType==='birthday' ? '🎂' : '💕';
+            ic.title=tip;
+            dotsWrap.appendChild(ic);
+          } else if(ev.isRecurring){
+            // 반복 일정 — 🔁 작은 흐린 아이콘
+            const ic=document.createElement('span');
+            ic.className='day-recur-ic';
+            ic.textContent='🔁';
             ic.title=tip;
             dotsWrap.appendChild(ic);
           } else if(ev.important){
@@ -2274,7 +2360,7 @@
       return `${s} (${WEEKDAYS[new Date(y,m-1,d).getDay()]})`;
     };
     // 다중 선택 모드면 각 날짜별로 매칭하여 합집합 처리
-    let matched, annivMatched, holidayItems;
+    let matched, annivMatched, holidayItems, recurMatched;
     if(multiSelectMode && multiSelectDates.size>0 && !editingEventId){
       const dateList=[...multiSelectDates];
       // 사용자 일정 — 선택된 날짜 중 어느 하나라도 겹치는 이벤트
@@ -2288,6 +2374,15 @@
           if(!annivSeen.has(k)){ annivSeen.add(k); annivMatched.push(a); }
         });
       });
+      // 반복 일정 — 선택된 날짜별
+      const recurSeen=new Set();
+      recurMatched=[];
+      dateList.forEach(d=>{
+        generateRecurringVirtualEventsForRange(d,d).forEach(r=>{
+          const k=`${r.startDate}|${r.text}`;
+          if(!recurSeen.has(k)){ recurSeen.add(k); recurMatched.push(r); }
+        });
+      });
       // 공휴일 — 선택된 날짜만
       holidayItems=[];
       dateList.forEach(ds=>{
@@ -2295,9 +2390,10 @@
         if(name) holidayItems.push({isHoliday:true, startDate:ds, endDate:ds, text:name, from:0, to:0});
       });
     } else {
-      // 사용자 일정 + 기념일 가상 이벤트 매칭
+      // 사용자 일정 + 기념일 + 반복 일정 가상 이벤트 매칭
       matched=events.filter(ev=>rangesOverlap(ev.startDate,ev.endDate,selectedStart,selectedEnd));
       annivMatched=generateAnniversaryVirtualEventsForRange(selectedStart,selectedEnd);
+      recurMatched=generateRecurringVirtualEventsForRange(selectedStart,selectedEnd);
       // 선택 기간 내 공휴일 수집 (가상 항목으로 리스트에 표시 — 삭제 불가)
       const [sy,sm,sd]=selectedStart.split('-').map(Number);
       const [ey,em,ed]=selectedEnd.split('-').map(Number);
@@ -2309,8 +2405,8 @@
         if(name) holidayItems.push({isHoliday:true, startDate:ds, endDate:ds, text:name, from:0, to:0});
       }
     }
-    // 통합 정렬 — 날짜순, 같은 날이면 공휴일→기념일→일반 순, 그 다음 시간순
-    const allItems=[...holidayItems, ...annivMatched, ...matched].sort((a,b)=>{
+    // 통합 정렬 — 날짜순, 같은 날이면 공휴일→기념일→반복→일반 순, 그 다음 시간순
+    const allItems=[...holidayItems, ...annivMatched, ...(recurMatched||[]), ...matched].sort((a,b)=>{
       if(a.startDate!==b.startDate)return a.startDate.localeCompare(b.startDate);
       if(!!a.isHoliday !== !!b.isHoliday) return a.isHoliday ? -1 : 1;
       return hourOf(a.from)-hourOf(b.from);
@@ -2363,6 +2459,37 @@
         // 잠금 아이콘 (삭제 불가 표시)
         const lock=document.createElement('span');lock.className='anniv-lock-icon';lock.textContent='🔒';lock.title='기념일 관리에서 삭제 가능';
         li.appendChild(content);li.appendChild(lock);list.appendChild(li);
+        return;
+      }
+
+      if(ev.isRecurring){
+        // 반복 일정 가상 이벤트 — 흐린 색, 삭제 시 원본 반복 규칙 자체 삭제
+        li.style.borderLeftColor=ev.color||'#95a5a6';
+        li.classList.add('recur-list-item');
+        const badge=document.createElement('span');badge.className='event-user';
+        badge.style.background=ev.color||'#888';badge.textContent=ev.user;content.appendChild(badge);
+        const tx=document.createElement('span');tx.className='event-text';
+        tx.textContent=ev.text;content.appendChild(tx);
+        const ts=formatTimeRange(ev.from,ev.to);
+        if(ts){
+          const tb=document.createElement('span');tb.className='event-time';
+          tb.textContent=`⏰ ${ts}`;content.appendChild(tb);
+        }
+        // 삭제 버튼 — 반복 규칙 전체 삭제
+        const delBtn=document.createElement('button');
+        delBtn.className='event-delete-btn';
+        delBtn.textContent='🗑️';
+        delBtn.title='반복 일정 전체 삭제';
+        delBtn.addEventListener('click', async (e)=>{
+          e.stopPropagation();
+          if(!confirm('이 반복 일정 전체를 삭제할까요? (모든 날짜에서 사라집니다)')) return;
+          try{
+            await fetchJSON(`${API}/recurring?prefix=${encodeURIComponent(PREFIX)}&id=${encodeURIComponent(ev.recurringId)}`, {method:'DELETE'});
+            cache.recurring = (cache.recurring||[]).filter(r=>r.id!==ev.recurringId);
+            renderCalendar(); renderEvents();
+          }catch(err){ alert('삭제 실패: '+err.message); }
+        });
+        li.appendChild(content); li.appendChild(delBtn); list.appendChild(li);
         return;
       }
 
@@ -3341,12 +3468,13 @@
 
     async function vbExecuteIntent(intent){
       switch(intent.action){
-        case 'query':  await vbQueryEvents(intent); break;
-        case 'add':    await vbAddEvent(intent); break;
-        case 'search': await vbSearchEvents(intent); break;
-        case 'delete': await vbDeleteEvent(intent); break;
+        case 'query':        await vbQueryEvents(intent); break;
+        case 'add':          await vbAddEvent(intent); break;
+        case 'addRecurring': await vbAddRecurring(intent); break;
+        case 'search':       await vbSearchEvents(intent); break;
+        case 'delete':       await vbDeleteEvent(intent); break;
         default:
-          vbAddBot('"오늘 일정 알려줘", "내일 병원 등록해줘", "병원 언제야?", "오늘 회의 삭제"처럼 말해보세요.');
+          vbAddBot('"오늘 일정 알려줘", "내일 병원 등록해줘", "병원 언제야?", "오늘 회의 삭제", "매주 화요일 약 등록해줘"처럼 말해보세요.');
           vbSpeak('오늘 일정 알려줘, 처럼 말해보세요.');
       }
     }
@@ -3357,7 +3485,12 @@
       const hasAddVerb = /등록|넣어|추가|잡아|해\s*줘/.test(text);
       const hasDeleteVerb = /삭제|지워|취소/.test(text);
       const hasSearchVerb = /언제|찾아|찾으|언젠|언제야|언제지|언제더라/.test(text);
+      const hasRecurring = /매일|매주|매월|매달|매년/.test(text);
 
+      // 반복 일정 등록 (가장 우선)
+      if(hasRecurring && hasAddVerb){
+        return {action:'addRecurring', rule: vbParseRecurring(text), eventText: vbExtractText(text), times: vbParseTimeRange(text)};
+      }
       // 등록 명령
       if(hasAddVerb){
         return {action:'add', dates: vbParseDateRange(text), times: vbParseTimeRange(text), eventText: vbExtractText(text)};
@@ -3516,9 +3649,12 @@
     function vbExtractText(text){
       return text
         .replace(/\d{1,2}월\s*\d{1,2}일/g,'')
-        .replace(/\d{1,2}\s*(?:일간|일\s*동안|주간|주\s*동안|달간|개월간|개월\s*동안|달\s*동안)/g,'')
+        .replace(/\d{1,2}\s*(?:일간|일\s*동안|주간|주\s*동안|달간|개월간|개월\s*동안|달\s*동안|년간|년\s*동안)/g,'')
         .replace(/(?:오전|오후|아침|저녁|밤|낮|새벽)?\s*\d{1,2}\s*시\s*(?:반|\d{1,2}\s*분)?/g,'')
         .replace(/(새벽|아침|오전|점심|낮|오후|저녁|밤|자정)(?:에|께|쯤|먹고|먹은\s*뒤|먹은\s*후)/g,'')
+        .replace(/매일|매주|매\s*주|매월|매달|매년/g,'')
+        .replace(/올해\s*말까지|연말까지|올\s*해\s*말/g,'')
+        .replace(/[월화수목금토일][요일]*[\s,·、]/g,'')
         .replace(/부터|까지|에서|~|등록|넣어|추가|잡아|해\s*줘|해줘|일정|좀|요|을|를|이|가|오늘|내일|모레|에/g,'')
         .replace(/다음\s*주\s*(월|화|수|목|금|토|일)요?일?/g,'')
         .replace(/이번\s*주\s*(월|화|수|목|금|토|일)요?일?/g,'')
@@ -3617,6 +3753,150 @@
           vbAddBot(msg); vbSpeak(`${dateLabel}${timeLabel}에 ${eventText} 등록했어요.`);
         } else throw new Error();
       }catch(e){ vbAddBot('등록 실패. 다시 시도해 주세요.'); vbSpeak('등록에 실패했어요.'); }
+    }
+
+    // (6-1) 반복 일정 등록
+    //   지원 패턴:
+    //     "매일", "매주 화요일", "매주 월수금", "매월 15일"
+    //     종료일: "올해 말까지", "12월 31일까지", "6개월간", "1년간", "3주간"
+    function vbParseRecurring(text){
+      const today = new Date();
+      const yr = today.getFullYear();
+      let rule = {freq:'daily', startDate: vbFmt(today)};
+      // 시작일 — 명시되어 있으면 사용, 아니면 오늘
+      const startM = text.match(/(\d{1,2})월\s*(\d{1,2})일\s*부터/);
+      if(startM){
+        rule.startDate = `${yr}-${vbPad(startM[1])}-${vbPad(startM[2])}`;
+      }
+
+      // 빈도 + 요일/날짜
+      if(/매일/.test(text)){
+        rule.freq = 'daily';
+      } else if(/매주|매\s*주/.test(text)){
+        rule.freq = 'weekly';
+        const dayMap = {월:'mon',화:'tue',수:'wed',목:'thu',금:'fri',토:'sat',일:'sun'};
+        const days = [];
+        // "월수금", "월·수·금", "월,수,금" 또는 "화요일"
+        const dayMatch = text.match(/매주\s*([월화수목금토일][\s,·、]*[월화수목금토일\s,·、요일]*)/);
+        if(dayMatch){
+          for(const ch of dayMatch[1]){
+            if(dayMap[ch]) days.push(dayMap[ch]);
+          }
+        }
+        if(days.length === 0){
+          // 기본: 오늘 요일
+          const wd = ['sun','mon','tue','wed','thu','fri','sat'][today.getDay()];
+          days.push(wd);
+        }
+        rule.days = [...new Set(days)];
+      } else if(/매월|매달/.test(text)){
+        rule.freq = 'monthly';
+        const dom = text.match(/매[월달]\s*(\d{1,2})일/);
+        rule.dayOfMonth = dom ? parseInt(dom[1]) : today.getDate();
+      }
+
+      // 종료일
+      let endDate = null;
+      // "12월 31일까지"
+      const endM = text.match(/(\d{1,2})월\s*(\d{1,2})일\s*까지/);
+      if(endM){
+        endDate = `${yr}-${vbPad(endM[1])}-${vbPad(endM[2])}`;
+      }
+      // "올해 말까지"
+      if(!endDate && /올해\s*말까지|연말까지|올\s*해\s*말/.test(text)){
+        endDate = `${yr}-12-31`;
+      }
+      // "N개월간", "N달간"
+      if(!endDate){
+        const mn = text.match(/(\d{1,2})\s*(?:개월|달)\s*(?:간|동안)?/);
+        if(mn){
+          const d = new Date(rule.startDate+'T00:00:00');
+          d.setMonth(d.getMonth() + parseInt(mn[1]));
+          d.setDate(d.getDate() - 1);
+          endDate = vbFmt(d);
+        }
+      }
+      // "N주간"
+      if(!endDate){
+        const wn = text.match(/(\d{1,2})\s*주\s*(?:간|동안)?/);
+        if(wn){
+          const d = new Date(rule.startDate+'T00:00:00');
+          d.setDate(d.getDate() + parseInt(wn[1])*7 - 1);
+          endDate = vbFmt(d);
+        }
+      }
+      // "N년간"
+      if(!endDate){
+        const yn = text.match(/(\d{1,2})\s*년\s*(?:간|동안)?/);
+        if(yn){
+          const d = new Date(rule.startDate+'T00:00:00');
+          d.setFullYear(d.getFullYear() + parseInt(yn[1]));
+          d.setDate(d.getDate() - 1);
+          endDate = vbFmt(d);
+        }
+      }
+      // "N일간"
+      if(!endDate){
+        const dn = text.match(/(\d{1,2})\s*일\s*(?:간|동안)/);
+        if(dn){
+          const d = new Date(rule.startDate+'T00:00:00');
+          d.setDate(d.getDate() + parseInt(dn[1]) - 1);
+          endDate = vbFmt(d);
+        }
+      }
+
+      rule.endDate = endDate; // null이면 호출자가 추가 질문
+      return rule;
+    }
+
+    async function vbAddRecurring(intent){
+      const rule = intent.rule;
+      const eventText = intent.eventText;
+      const {from, to} = intent.times || {from:'', to:''};
+
+      if(!eventText){
+        vbAddBot('어떤 반복 일정인지 알아듣지 못했어요. (예: 매주 화요일 약 등록해줘)');
+        vbSpeak('어떤 반복 일정인지 알아듣지 못했어요.');
+        return;
+      }
+      if(!rule.endDate){
+        // 종료일 없으면 기본 1년으로 설정 + 안내
+        const d = new Date(rule.startDate+'T00:00:00');
+        d.setFullYear(d.getFullYear()+1);
+        d.setDate(d.getDate()-1);
+        rule.endDate = vbFmt(d);
+        vbAddBot(`📅 종료일을 말씀하지 않아서 1년 후(${rule.endDate})까지 반복으로 등록할게요.`);
+      }
+
+      const freqLabel = rule.freq==='daily' ? '매일'
+                      : rule.freq==='weekly' ? `매주 ${(rule.days||[]).map(d=>({mon:'월',tue:'화',wed:'수',thu:'목',fri:'금',sat:'토',sun:'일'}[d])).join('·')}요일`
+                      : `매월 ${rule.dayOfMonth}일`;
+
+      try{
+        const item = {
+          id: 'rec_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),
+          user: currentUser||'음성도우미',
+          color: currentUserColor||'#888',
+          text: eventText,
+          freq: rule.freq,
+          days: rule.days,
+          dayOfMonth: rule.dayOfMonth,
+          startDate: rule.startDate,
+          endDate: rule.endDate,
+          from, to
+        };
+        const res = await fetch(API+'/recurring?prefix='+PREFIX, {
+          method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(item)
+        });
+        if(res.ok){
+          cache.recurring = cache.recurring || [];
+          cache.recurring.push(item);
+          renderCalendar(); renderEvents();
+          const msg = `🔁 ${freqLabel} "${eventText}" 반복 일정을 ${rule.startDate} ~ ${rule.endDate} 기간으로 등록했어요!`;
+          vbAddBot(msg);
+          vbSpeak(`${freqLabel} ${eventText} 반복 일정을 등록했어요.`);
+        } else throw new Error();
+      }catch(e){ vbAddBot('반복 일정 등록에 실패했어요.'); vbSpeak('등록에 실패했어요.'); }
     }
 
     // (7) 일정 검색 — 키워드로 가장 가까운 일정 찾기
