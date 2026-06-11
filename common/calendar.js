@@ -2486,7 +2486,7 @@
           try{
             await fetchJSON(`${API}/recurring?prefix=${encodeURIComponent(PREFIX)}&id=${encodeURIComponent(ev.recurringId)}`, {method:'DELETE'});
             cache.recurring = (cache.recurring||[]).filter(r=>r.id!==ev.recurringId);
-            renderCalendar(); renderEvents();
+            renderCalendar(); renderEventList();
           }catch(err){ alert('삭제 실패: '+err.message); }
         });
         li.appendChild(content); li.appendChild(delBtn); list.appendChild(li);
@@ -3952,7 +3952,7 @@
         });
         if(res.ok){
           cache.events.push(ev);
-          renderCalendar(); renderEvents();
+          renderCalendar(); renderEventList();
           const msg = `✅ ${dateLabel}${timeLabel}에 "${eventText}" 등록했어요!`;
           vbAddBot(msg); vbSpeak(`${dateLabel}${timeLabel}에 ${eventText} 등록했어요.`);
         } else {
@@ -4098,7 +4098,7 @@
         if(res.ok){
           cache.recurring = cache.recurring || [];
           cache.recurring.push(item);
-          renderCalendar(); renderEvents();
+          renderCalendar(); renderEventList();
           const msg = `🔁 ${freqLabel} "${eventText}" 반복 일정을 ${rule.startDate} ~ ${rule.endDate} 기간으로 등록했어요!`;
           vbAddBot(msg);
           vbSpeak(`${freqLabel} ${eventText} 반복 일정을 등록했어요.`);
@@ -4216,7 +4216,7 @@
           // 캐시 업데이트
           const idx = cache.events.findIndex(e=>e.id===ev.id);
           if(idx>=0) cache.events.splice(idx,1);
-          renderCalendar(); renderEvents();
+          renderCalendar(); renderEventList();
           const dateLabel = vbWhenLabel(ev.startDate);
           vbAddBot(`🗑️ ${dateLabel} "${ev.text}" 일정을 삭제했어요.`);
           vbSpeak(`${dateLabel} ${ev.text} 일정을 삭제했어요.`);
