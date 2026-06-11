@@ -3475,12 +3475,17 @@
     }
 
     async function vbExecuteIntent(intent){
-      // (a) 등록인데 날짜가 없으면 먼저 날짜 물어보기
+      // (a) 등록인데 "N일"만 있고 월이 없으면 먼저 월 물어보기
+      if(intent.action==='add' && intent.dates && intent.dates.needMonth){
+        vbAskMonthForAdd(intent);
+        return;
+      }
+      // (b) 등록인데 날짜가 아예 없으면 날짜 물어보기
       if(intent.action==='add' && (!intent.dates || !intent.dates.startDate)){
         vbAskDateForAdd(intent);
         return;
       }
-      // (b) 등록인데 내용이 비어있으면 안내 후 종료
+      // (c) 등록인데 내용이 비어있으면 안내 후 종료
       if(intent.action==='add' && !intent.eventText){
         const q='무슨 일정을 등록할까요? 다시 말씀해 주세요. 예: "내일 병원 등록해줘"';
         vbAddBot(q); vbSpeak(q);
@@ -3531,6 +3536,43 @@
         else if(v==='delete'){
           await vbDeleteEvent({action:'delete', dates: vbParseDateRange(originalText), keyword: kw});
         }
+      });
+    }
+
+    // 등록 — "N일"만 있고 월을 모를 때 — 월 버튼 제시
+    function vbAskMonthForAdd(intent){
+      const day = intent.dates.day;
+      const t = intent.eventText ? `"${intent.eventText}" ` : '';
+      const q = `${t}${day}일은 몇 월인가요?`;
+      vbAddBot(q); vbSpeak(`${day}일은 몇 월인가요?`);
+      const today = new Date();
+      const yr = today.getFullYear();
+      const curM = today.getMonth() + 1; // 1-12
+      // (1) 후보 4개월 — 이번달, 다음달, 다다음달, 그 다음달
+      const btns = [];
+      for(let i = 0; i < 4; i++){
+        const m = ((curM - 1 + i) % 12) + 1;
+        // (2) 이번 달인데 N일이 이미 지난 경우 → 다음달부터 시작
+        if(i === 0){
+          if(day < today.getDate()) continue;  // 이번 달은 건너뛰기
+        }
+        btns.push({label:`${m}월 ${day}일`, value:String(m)});
+      }
+      // (3) 부족하면 그 뒤 달 채우기
+      while(btns.length < 4){
+        const next = parseInt(btns[btns.length-1].value, 10) % 12 + 1;
+        btns.push({label:`${next}월 ${day}일`, value:String(next)});
+      }
+      btns.push({label:'취소', value:'cancel'});
+      vbAddButtons(btns, async (v)=>{
+        if(v==='cancel'){ vbAddBot('등록을 취소했어요.'); vbSpeak('등록을 취소했어요.'); return; }
+        const mNum = parseInt(v, 10);
+        // (4) 선택한 달이 현재보다 작거나(이번달 지난날) — 내년으로 처리
+        let targetYear = yr;
+        if(mNum < curM || (mNum === curM && day < today.getDate())) targetYear = yr + 1;
+        const ds = `${targetYear}-${vbPad(mNum)}-${vbPad(day)}`;
+        intent.dates = {startDate: ds, endDate: ds};
+        await vbExecuteIntent(intent);
       });
     }
 
@@ -3675,6 +3717,16 @@
       // (e) "N월 M일" 단일
       m = text.match(/(\d{1,2})월\s*(\d{1,2})일/);
       if(m) return {startDate:`${yr}-${vbPad(m[1])}-${vbPad(m[2])}`, endDate:`${yr}-${vbPad(m[1])}-${vbPad(m[2])}`};
+
+      // (e-2) 월 없이 "N일"만 있는 경우 — 달 선택 필요 표시
+      // 예: "15일 병원 등록해줘" → 몇월 15일인지 못 알음
+      m = text.match(/(?:^|[^\d])(\d{1,2})일(?![간동])/);
+      if(m){
+        const day = parseInt(m[1]);
+        if(day >= 1 && day <= 31){
+          return {startDate:null, endDate:null, needMonth:true, day:day};
+        }
+      }
 
       // (f) 상대 날짜
       const rel = vbRelDate(text);
