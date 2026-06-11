@@ -3400,6 +3400,8 @@
 
     // (3) 의도 파악
     async function vbHandleCommand(text){
+      // 한글 숫자 전처리 ("육월 십오일" → "6월 15일")
+      text = vbKorNumToDigit(text);
       // 이전에 확인 질문이 떠 있다면 yes/no 처리
       if(vbPendingIntent){
         // 삭제 확인 (단일 후보)
@@ -3622,7 +3624,32 @@
       });
     }
 
+    // 한글 숫자 → 아라비아 숫자 변환
+    // 예: "육월 십오일" → "6월 15일", "이십삼일" → "23일"
+    function vbKorNumToDigit(text){
+      const units = {'일':1,'이':2,'삼':3,'사':4,'오':5,'육':6,'칠':7,'팔':8,'구':9};
+      const tens  = {'십':10,'이십':20,'삼십':30};
+      // (a) "N십M" 패턴 (예: 이십삼 → 23, 십오 → 15)
+      let result = text;
+      // (a-1) 이십삼, 삼십일 등 → 숫자
+      result = result.replace(/(이십|삼십|십)([일이삼사오육칠팔구])?/g, (_, t, u) => {
+        let val = tens[t] || 10;
+        if(u) val += (units[u] || 0);
+        return String(val);
+      });
+      // (b) 단독 한글 숫자 + "월" 또는 "일" (예: 육월, 구일)
+      result = result.replace(/([일이삼사오육칠팔구])월/g, (_, n) => (units[n]||0) + '월');
+      result = result.replace(/([일이삼사오육칠팔구])일/g, (_, n) => {
+        // "일일" 방지 — "일"이 숫자 1이 아니라 "일(日)"인 경우 제외
+        if(n === '일') return '1일';
+        return (units[n]||0) + '일';
+      });
+      return result;
+    }
+
     function vbParseIntent(text){
+      // 한글 숫자 전처리
+      text = vbKorNumToDigit(text);
       const hasWhen = /오늘|내일|모레|이번\s*주|다음\s*주|이번\s*달|\d{1,2}월\s*\d{1,2}일/.test(text);
       const hasQueryVerb = /알려|뭐.*있|있.*뭐|확인|조회/.test(text);
       const hasAddVerb = /등록|넣어|추가|잡아|해\s*줘/.test(text);
