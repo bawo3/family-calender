@@ -3438,6 +3438,22 @@
           }
           vbPendingIntent = null;
         }
+        // 내용 수정 대기 — 사용자가 새 텍스트를 말함
+        else if(vbPendingIntent.action === '_editText'){
+          const draft = vbPendingIntent.draft;
+          vbPendingIntent = null;
+          // 취소 감지
+          if(/취소|아니|그만/.test(text)){
+            vbShowConfirm(draft);
+            return;
+          }
+          // 새 텍스트로 교체 (불필요 단어 제거)
+          let newText = text.replace(/등록|넣어|추가|잡아|해\s*줘|해줘|일정|좀|요|을|를|으로|변경|수정|바꿔/g,'').trim();
+          if(!newText){ vbAddBot('내용을 알아듣지 못했어요. 다시 말씀해 주세요.'); vbSpeak('다시 말씀해 주세요.'); vbPendingIntent = {action:'_editText', draft}; return; }
+          draft.eventText = newText;
+          vbShowConfirm(draft);
+          return;
+        }
         // 일반 query 확인
         else if(/응|예|네|맞|좋|그래|어/.test(text)){
           const pend = vbPendingIntent; vbPendingIntent = null;
@@ -3929,23 +3945,132 @@
       return w;
     }
 
-    // (6) 일정 등록
+    // (6) 일정 등록 — 확인 후 수정 가능한 대화형
     async function vbAddEvent(intent){
       const {startDate,endDate} = intent.dates||{};
       const {from,to} = intent.times || {from:'', to:''};
       const eventText = intent.eventText;
       if(!startDate){ vbAddBot('날짜를 알아듣지 못했어요.'); vbSpeak('날짜를 알아듣지 못했어요.'); return; }
       if(!eventText){ vbAddBot('어떤 일정인지 알아듣지 못했어요.'); vbSpeak('어떤 일정인지 알아듣지 못했어요.'); return; }
-      const dateLabel = startDate===endDate ? startDate : `${startDate} ~ ${endDate}`;
-      const timeLabel = from ? (to ? ` (${from} ~ ${to})` : ` (${from} 부터)`) : '';
+      // 확인 화면 표시
+      vbShowConfirm({
+        action:'add',
+        startDate, endDate: endDate||startDate,
+        from: from||'', to: to||'',
+        eventText
+      });
+    }
+
+    // 등록/삭제 확인 화면 — 수정 버튼 포함
+    function vbShowConfirm(draft){
+      const dateLabel = draft.startDate===draft.endDate
+        ? vbWhenLabel(draft.startDate)
+        : `${vbWhenLabel(draft.startDate)} ~ ${vbWhenLabel(draft.endDate)}`;
+      const timeLabel = draft.from
+        ? (draft.to ? `${draft.from} ~ ${draft.to}` : `${draft.from}부터`)
+        : '시간 없음';
+      const summary = `📋 이렇게 등록할까요?\n\n📅 날짜: ${dateLabel}\n⏰ 시간: ${timeLabel}\n📝 내용: ${draft.eventText}`;
+      vbAddBot(summary);
+      vbSpeak(`${dateLabel}, ${timeLabel}, ${draft.eventText}, 이렇게 등록할까요?`);
+      // 확인/수정 버튼
+      const btns = [
+        {label:'✅ 등록', value:'confirm'},
+        {label:'📅 날짜 수정', value:'editDate'},
+        {label:'⏰ 시간 수정', value:'editTime'},
+        {label:'📝 내용 수정', value:'editText'},
+        {label:'취소', value:'cancel'}
+      ];
+      vbAddButtons(btns, async (v)=>{
+        if(v==='confirm'){
+          await vbDoAddEvent(draft);
+        } else if(v==='editDate'){
+          vbEditDate(draft);
+        } else if(v==='editTime'){
+          vbEditTime(draft);
+        } else if(v==='editText'){
+          vbEditText(draft);
+        } else {
+          vbAddBot('등록을 취소했어요.'); vbSpeak('등록을 취소했어요.');
+        }
+      });
+    }
+
+    // 날짜 수정 — 버튼으로 선택
+    function vbEditDate(draft){
+      vbAddBot('언제로 변경할까요?');
+      vbSpeak('언제로 변경할까요?');
+      const today = new Date();
+      const btns = [
+        {label:'오늘', value:'today'},
+        {label:'내일', value:'tomorrow'},
+        {label:'모레', value:'dayafter'}
+      ];
+      // 현재 날짜 근처 +-2일 추가
+      for(let i=3; i<=5; i++){
+        const d = vbAddDays(today, i);
+        btns.push({label:`${d.getMonth()+1}월 ${d.getDate()}일`, value:vbFmt(d)});
+      }
+      btns.push({label:'취소', value:'cancel'});
+      vbAddButtons(btns, (v)=>{
+        if(v==='cancel'){ vbShowConfirm(draft); return; }
+        let d;
+        if(v==='today') d = vbFmt(new Date());
+        else if(v==='tomorrow') d = vbFmt(vbAddDays(new Date(),1));
+        else if(v==='dayafter') d = vbFmt(vbAddDays(new Date(),2));
+        else d = v;
+        draft.startDate = d;
+        draft.endDate = d;
+        vbShowConfirm(draft);
+      });
+    }
+
+    // 시간 수정 — 버튼으로 선택
+    function vbEditTime(draft){
+      vbAddBot('시간을 선택해 주세요.');
+      vbSpeak('시간을 선택해 주세요.');
+      const btns = [
+        {label:'시간 없음', value:'none'},
+        {label:'아침 (8시)', value:'08:00-09:00'},
+        {label:'오전 (10시)', value:'10:00-11:00'},
+        {label:'점심 (12시)', value:'12:00-13:00'},
+        {label:'오후 (15시)', value:'15:00-16:00'},
+        {label:'저녁 (19시)', value:'19:00-20:00'},
+        {label:'취소', value:'cancel'}
+      ];
+      vbAddButtons(btns, (v)=>{
+        if(v==='cancel'){ vbShowConfirm(draft); return; }
+        if(v==='none'){ draft.from=''; draft.to=''; }
+        else {
+          const [f,t] = v.split('-');
+          draft.from = f; draft.to = t;
+        }
+        vbShowConfirm(draft);
+      });
+    }
+
+    // 내용 수정 — 음성으로 다시 받기
+    function vbEditText(draft){
+      const q = '새 내용을 말씀해 주세요. (예: "엄마 병원")';
+      vbAddBot(q); vbSpeak('새 내용을 말씀해 주세요.');
+      // pendingIntent에 수정 대기 상태 저장
+      vbPendingIntent = {
+        action: '_editText',
+        draft: draft
+      };
+    }
+
+    // 실제 API 호출하여 등록 수행
+    async function vbDoAddEvent(draft){
       try{
         const ev = {
           id: Date.now().toString(36)+Math.random().toString(36).slice(2,7),
           user: currentUser||'음성도우미',
           color: currentUserColor||'#4a90d9',
-          text: eventText,
-          startDate, endDate: endDate||startDate,
-          from, to, important:false
+          text: draft.eventText,
+          startDate: draft.startDate,
+          endDate: draft.endDate,
+          from: draft.from, to: draft.to,
+          important: false
         };
         const res = await fetch(API+'/events?prefix='+PREFIX, {
           method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(ev)
@@ -3953,8 +4078,10 @@
         if(res.ok){
           cache.events.push(ev);
           renderCalendar(); renderEventList();
-          const msg = `✅ ${dateLabel}${timeLabel}에 "${eventText}" 등록했어요!`;
-          vbAddBot(msg); vbSpeak(`${dateLabel}${timeLabel}에 ${eventText} 등록했어요.`);
+          const dateLabel = draft.startDate===draft.endDate ? vbWhenLabel(draft.startDate) : `${vbWhenLabel(draft.startDate)} ~ ${vbWhenLabel(draft.endDate)}`;
+          const timeLabel = draft.from ? ` (${draft.from} ~ ${draft.to})` : '';
+          const msg = `✅ ${dateLabel}${timeLabel}에 "${draft.eventText}" 등록했어요!`;
+          vbAddBot(msg); vbSpeak(`${draft.eventText} 등록 완료!`);
         } else {
           const errData = await res.text();
           throw new Error(errData || '서버 오류');
