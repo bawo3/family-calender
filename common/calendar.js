@@ -3261,7 +3261,7 @@
     let vbChunks = [];
     let vbListening = false;
     let vbSpeechResult = '';
-    let vbSilenceTimer = null;     // 4초 무음 감지 타이머
+    let vbSilenceTimer = null;     // 2초 무음 감지 타이머
     let vbAudioCtx = null;
     let vbAnalyser = null;
     let vbRafId = null;
@@ -3338,7 +3338,7 @@
         src.connect(vbAnalyser);
         const buf = new Uint8Array(vbAnalyser.fftSize);
         const SILENCE_THRESHOLD = 0.015; // RMS 임계값
-        const SILENCE_DURATION = 4000;   // 4초
+        const SILENCE_DURATION = 2000;   // 2초
         let silenceStart = null;
         let everSpoke = false;
 
@@ -3459,8 +3459,14 @@
       if(intent.action==='query' && intent.short){
         vbPendingIntent = intent;
         const label = vbWhenLabel(intent.when);
-        const q = `${label} 일정을 알려드릴까요? (예/아니오)`;
+        const q = `${label} 일정을 알려드릴까요?`;
         vbAddBot(q); vbSpeak(q);
+        // 클릭 버튼 제공
+        vbAddButtons([{label:'예', value:'yes'},{label:'아니오', value:'no'}], async (v)=>{
+          const pend = vbPendingIntent; vbPendingIntent = null;
+          if(v==='yes'){ await vbExecuteIntent(pend); }
+          else { vbAddBot('알겠어요. 취소했어요.'); vbSpeak('취소했어요.'); }
+        });
         return;
       }
       await vbExecuteIntent(intent);
@@ -3964,21 +3970,38 @@
           const ev = candidates[0];
           vbPendingIntent = {action:'_doDelete', event: ev};
           const dateLabel = vbWhenLabel(ev.startDate);
-          const q = `${dateLabel} "${ev.text}" 일정을 삭제할까요? (예/아니오)`;
+          const q = `${dateLabel} "${ev.text}" 일정을 삭제할까요?`;
           vbAddBot(q); vbSpeak(q);
+          // 클릭 버튼 제공
+          vbAddButtons([{label:'예, 삭제', value:'yes'},{label:'아니오', value:'no'}], async (v)=>{
+            const evRef = vbPendingIntent && vbPendingIntent.event;
+            vbPendingIntent = null;
+            if(v==='yes' && evRef){ await vbExecuteDelete(evRef); }
+            else { vbAddBot('삭제를 취소했어요.'); vbSpeak('삭제를 취소했어요.'); }
+          });
           return;
         }
         // 여러 건 — 번호로 선택
         let msg = '여러 일정이 있어요. 어떤 걸 삭제할까요?\n';
-        const sp = ['여러 일정이 있어요. 번호로 말씀해 주세요.'];
-        candidates.slice(0,5).forEach((ev,i)=>{
+        const sp = ['여러 일정이 있어요. 번호를 눌러 주세요.'];
+        const top = candidates.slice(0,5);
+        top.forEach((ev,i)=>{
           const dl = vbWhenLabel(ev.startDate);
           msg += `${i+1}. ${dl} "${ev.text}" (${ev.user})\n`;
           sp.push(`${i+1}번, ${ev.text}.`);
         });
-        msg += '\n예: "1번 삭제해줘"';
-        vbPendingIntent = {action:'_chooseDelete', candidates: candidates.slice(0,5)};
+        vbPendingIntent = {action:'_chooseDelete', candidates: top};
         vbAddBot(msg); vbSpeak(sp.join(' '));
+        // 클릭 버튼 제공 (번호 + 취소)
+        const btns = top.map((_,i)=>({label:`${i+1}번`, value:String(i)}));
+        btns.push({label:'취소', value:'cancel'});
+        vbAddButtons(btns, async (v)=>{
+          const cands = vbPendingIntent && vbPendingIntent.candidates;
+          vbPendingIntent = null;
+          if(v==='cancel' || !cands){ vbAddBot('취소했어요.'); vbSpeak('취소했어요.'); return; }
+          const idx = parseInt(v,10);
+          if(idx>=0 && idx<cands.length){ await vbExecuteDelete(cands[idx]); }
+        });
       }catch(e){
         vbAddBot('삭제 처리 중 오류가 발생했어요.'); vbSpeak('오류가 발생했어요.');
       }
@@ -4017,6 +4040,31 @@
     // 유틸
     function vbAddBot(t){ const d=document.createElement('div');d.className='vb-msg bot';d.textContent=t;d.style.whiteSpace='pre-line';chatEl.appendChild(d);chatEl.scrollTop=chatEl.scrollHeight; }
     function vbAddUser(t){ const d=document.createElement('div');d.className='vb-msg user';d.textContent=t;chatEl.appendChild(d);chatEl.scrollTop=chatEl.scrollHeight; }
+    // 확인 질문에 클릭 버튼 표시 (음성 대신 누르면 즉시 처리)
+    // options: [{label:'예', value:'yes'}, ...], onPick: function(value)
+    function vbAddButtons(options, onPick){
+      const wrap=document.createElement('div');
+      wrap.className='vb-btn-row';
+      options.forEach(opt=>{
+        const b=document.createElement('button');
+        b.type='button';
+        b.className='vb-choice-btn';
+        b.textContent=opt.label;
+        b.addEventListener('click',()=>{
+          // (a) 중복 클릭 방지 — 같은 그룹 비활성화
+          wrap.querySelectorAll('button').forEach(x=>x.disabled=true);
+          b.classList.add('picked');
+          // (b) 사용자 발화처럼 보이도록 메시지 추가
+          vbAddUser(opt.label);
+          // (c) 음성 출력 중이면 중단
+          try{ speechSynthesis.cancel(); }catch(e){}
+          onPick(opt.value);
+        });
+        wrap.appendChild(b);
+      });
+      chatEl.appendChild(wrap);
+      chatEl.scrollTop=chatEl.scrollHeight;
+    }
     function vbFmt(d){ return `${d.getFullYear()}-${vbPad(d.getMonth()+1)}-${vbPad(d.getDate())}`; }
     function vbAddDays(d,n){ const r=new Date(d);r.setDate(r.getDate()+n);return r; }
     function vbPad(n){ return String(n).padStart(2,'0'); }
