@@ -1,5 +1,5 @@
 // 정적 자원 캐시 목록
-const CACHE = 'cal-v4';
+const CACHE = 'cal-v5';
 const PRECACHE = ['/common/calendar.css', '/common/calendar.js'];
 
 // 설치 시 — HTTP 캐시 우회해서 항상 최신 파일 저장
