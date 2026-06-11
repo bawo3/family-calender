@@ -3083,18 +3083,22 @@
     let vbRecorder = null;
     let vbChunks = [];
     let vbListening = false;
+    let vbSpeechResult = ''; // Web Speech 실시간 결과 보관
 
     micBtn.addEventListener('click', vbStartListening);
 
-    // (1) 녹음 시작/중지
+    // (1) 녹음 시작/중지 — Web Speech API를 동시에 실행
     async function vbStartListening(){
       if(vbListening){ vbStopListening(); return; }
       try{
         const stream = await navigator.mediaDevices.getUserMedia({audio:true});
         vbListening = true;
+        vbSpeechResult = '';
         micBtn.classList.add('listening');
         micBtn.querySelector('.vb-mic-label').textContent = '듣고 있어요...';
         statusEl.textContent = '말씀 끝나면 버튼을 다시 눌러주세요';
+
+        // (a) MediaRecorder로 오디오 녹음 (Groq 전송용)
         vbChunks = [];
         const mime = ['audio/webm;codecs=opus','audio/webm','audio/mp4']
           .find(t=>MediaRecorder.isTypeSupported(t)) || 'audio/webm';
@@ -3106,11 +3110,35 @@
           await vbProcessAudio(blob);
         };
         vbRecorder.start();
-        // 최대 15초 자동 종료
+
+        // (b) Web Speech API 실시간 인식 (동시 실행 — 폴백 겸 즉시 결과)
+        vbStartWebSpeech();
+
+        // (c) 최대 15초 자동 종료
         setTimeout(()=>{ if(vbListening) vbStopListening(); }, 15000);
       } catch(e){
         vbAddBot('마이크 권한을 허용해 주세요.');
       }
+    }
+
+    let vbRecognition = null;
+    function vbStartWebSpeech(){
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if(!SR) return;
+      vbRecognition = new SR();
+      vbRecognition.lang = 'ko-KR';
+      vbRecognition.continuous = true;
+      vbRecognition.interimResults = true;
+      vbRecognition.onresult = (e)=>{
+        let final = '';
+        for(let i=0; i<e.results.length; i++){
+          if(e.results[i].isFinal) final += e.results[i][0].transcript;
+        }
+        if(final) vbSpeechResult = final;
+      };
+      vbRecognition.onerror = ()=>{};
+      vbRecognition.onend = ()=>{};
+      try{ vbRecognition.start(); }catch(e){}
     }
 
     function vbStopListening(){
@@ -3118,12 +3146,17 @@
       micBtn.classList.remove('listening');
       micBtn.querySelector('.vb-mic-label').textContent = '누르고 말하세요';
       statusEl.textContent = '인식 중...';
+      // Web Speech 중지
+      if(vbRecognition){ try{ vbRecognition.stop(); }catch(e){} vbRecognition=null; }
+      // MediaRecorder 중지 → onstop에서 processAudio 호출
       if(vbRecorder && vbRecorder.state==='recording') vbRecorder.stop();
     }
 
-    // (2) STT: Groq Whisper (서버 프록시) → Web Speech 폴백
+    // (2) STT 처리: Groq 우선, 실패 시 Web Speech 결과 사용
     async function vbProcessAudio(blob){
       let text = '';
+
+      // (a) Groq Whisper 시도
       try{
         const fd = new FormData();
         fd.append('file', blob, 'audio.webm');
@@ -3132,8 +3165,8 @@
         if(res.ok){ const d = await res.json(); text = d.text||''; }
       }catch(e){}
 
-      // 폴백: Web Speech API (재녹음 방식)
-      if(!text) text = await vbWebSpeechFallback();
+      // (b) Groq 실패 시 Web Speech 실시간 결과 사용
+      if(!text && vbSpeechResult) text = vbSpeechResult;
 
       statusEl.textContent = '';
       if(text){
@@ -3144,20 +3177,6 @@
         vbSpeak('다시 한번 말씀해 주세요.');
       }
     }
-
-    function vbWebSpeechFallback(){
-      return new Promise(resolve=>{
-        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if(!SR){ resolve(''); return; }
-        const rec = new SR();
-        rec.lang='ko-KR'; rec.continuous=false; rec.interimResults=false;
-        let done=false;
-        rec.onresult=e=>{ done=true; resolve(e.results[0][0].transcript); };
-        rec.onerror=()=>{ if(!done) resolve(''); };
-        rec.onend=()=>{ if(!done) resolve(''); };
-        rec.start();
-        setTimeout(()=>{ if(!done){ rec.stop(); resolve(''); }}, 8000);
-      });
     }
 
     // (3) 의도 파악 (규칙 기반)

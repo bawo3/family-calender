@@ -4,7 +4,7 @@
  * 외부 의존성 없이 boundary 기반으로 파싱합니다.
  */
 
-function parseMultipart(req) {
+export function parseMultipart(req) {
   return new Promise((resolve, reject) => {
     const contentType = req.headers['content-type'] || '';
     const boundaryMatch = contentType.match(/boundary=(.+)/);
@@ -97,5 +97,3 @@ function parsePart(buf) {
 
   return { header, body };
 }
-
-module.exports = { parseMultipart };

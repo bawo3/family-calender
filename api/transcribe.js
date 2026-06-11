@@ -6,7 +6,9 @@
  * 환경변수: GROQ_API_KEY (groq.com에서 무료 발급)
  */
 
-module.exports = async (req, res) => {
+import { parseMultipart } from './_multipart.js';
+
+export default async function handler(req, res) {
   // CORS 허용
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -23,18 +25,14 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // (1) multipart/form-data 파싱 (Vercel serverless는 body를 Buffer로 받음)
-    const { parseMultipart } = require('./_multipart');
+    // (1) multipart/form-data 파싱
     const { fileBuffer, fileName, language } = await parseMultipart(req);
 
     if (!fileBuffer || fileBuffer.length === 0) {
       return res.status(400).json({ error: '오디오 파일이 없습니다.' });
     }
 
-    // (2) Groq Whisper API 호출
-    const FormData = (await import('undici')).FormData;
-    const { Blob } = (await import('buffer'));
-
+    // (2) Groq Whisper API 호출 (Node 20 내장 fetch + Blob)
     const form = new FormData();
     form.append('file', new Blob([fileBuffer]), fileName || 'audio.webm');
     form.append('model', 'whisper-large-v3');
@@ -60,4 +58,4 @@ module.exports = async (req, res) => {
     console.error('transcribe 에러:', e);
     return res.status(500).json({ error: '서버 오류', detail: e.message });
   }
-};
+}
