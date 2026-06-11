@@ -292,6 +292,7 @@
         <button class="u-btn" id="alarmBtn" title="중요일정 알림 설정">🔕</button>
         <button class="u-btn" id="noticeBtn">📢</button>
         <button class="u-btn" id="anniversaryBtn" title="기념일/생일 관리">💗</button>
+        <button class="u-btn" id="voiceBotBtn" title="음성 도우미">🎤</button>
       </div>
     </div>
   </div>
@@ -3031,5 +3032,306 @@
         showCalendar(true); // 자동 로그인 시 공지 자동 팝업
       }
     }
+  })();
+
+  // -----------------------------------------
+  // ★★ 음성 봇 모듈 (Groq Whisper STT + 규칙 기반 NLU + TTS) ★★
+  // 캘린더 화면의 🎤 버튼으로 호출
+  // -----------------------------------------
+  (function initVoiceBot(){
+    const voiceBtn = document.getElementById('voiceBotBtn');
+    if(!voiceBtn) return;
+
+    // 음성 봇 팝업 오버레이 HTML
+    const voiceHTML = `
+<div id="voiceBotOverlay" class="voice-bot-overlay hidden">
+  <div class="voice-bot-panel">
+    <div class="voice-bot-header">
+      <h2>🎤 음성 도우미</h2>
+      <button id="voiceBotClose" class="voice-bot-close">✕</button>
+    </div>
+    <div class="voice-bot-chat" id="voiceBotChat">
+      <div class="vb-msg bot">
+        안녕하세요! 마이크 버튼을 누르고 말해 주세요.<br>
+        • "오늘 일정 알려줘"<br>
+        • "내일 병원 등록해줘"<br>
+        • "6월 20일부터 25일까지 여행 넣어줘"
+      </div>
+    </div>
+    <div class="voice-bot-mic-area">
+      <button id="voiceBotMic" class="voice-bot-mic-btn" aria-label="음성 입력">
+        <span class="vb-mic-icon">🎤</span>
+        <span class="vb-mic-label">누르고 말하세요</span>
+      </button>
+      <div class="vb-status" id="voiceBotStatus"></div>
+    </div>
+  </div>
+</div>`;
+    document.body.insertAdjacentHTML('beforeend', voiceHTML);
+
+    const overlay = document.getElementById('voiceBotOverlay');
+    const closeBtn = document.getElementById('voiceBotClose');
+    const micBtn = document.getElementById('voiceBotMic');
+    const chatEl = document.getElementById('voiceBotChat');
+    const statusEl = document.getElementById('voiceBotStatus');
+
+    // 열기/닫기
+    voiceBtn.addEventListener('click', ()=> overlay.classList.remove('hidden'));
+    closeBtn.addEventListener('click', ()=> overlay.classList.add('hidden'));
+
+    // 녹음 상태
+    let vbRecorder = null;
+    let vbChunks = [];
+    let vbListening = false;
+
+    micBtn.addEventListener('click', vbStartListening);
+
+    // (1) 녹음 시작/중지
+    async function vbStartListening(){
+      if(vbListening){ vbStopListening(); return; }
+      try{
+        const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+        vbListening = true;
+        micBtn.classList.add('listening');
+        micBtn.querySelector('.vb-mic-label').textContent = '듣고 있어요...';
+        statusEl.textContent = '말씀 끝나면 버튼을 다시 눌러주세요';
+        vbChunks = [];
+        const mime = ['audio/webm;codecs=opus','audio/webm','audio/mp4']
+          .find(t=>MediaRecorder.isTypeSupported(t)) || 'audio/webm';
+        vbRecorder = new MediaRecorder(stream, {mimeType: mime});
+        vbRecorder.ondataavailable = e=>{ if(e.data.size>0) vbChunks.push(e.data); };
+        vbRecorder.onstop = async()=>{
+          stream.getTracks().forEach(t=>t.stop());
+          const blob = new Blob(vbChunks, {type: vbRecorder.mimeType});
+          await vbProcessAudio(blob);
+        };
+        vbRecorder.start();
+        // 최대 15초 자동 종료
+        setTimeout(()=>{ if(vbListening) vbStopListening(); }, 15000);
+      } catch(e){
+        vbAddBot('마이크 권한을 허용해 주세요.');
+      }
+    }
+
+    function vbStopListening(){
+      vbListening = false;
+      micBtn.classList.remove('listening');
+      micBtn.querySelector('.vb-mic-label').textContent = '누르고 말하세요';
+      statusEl.textContent = '인식 중...';
+      if(vbRecorder && vbRecorder.state==='recording') vbRecorder.stop();
+    }
+
+    // (2) STT: Groq Whisper (서버 프록시) → Web Speech 폴백
+    async function vbProcessAudio(blob){
+      let text = '';
+      try{
+        const fd = new FormData();
+        fd.append('file', blob, 'audio.webm');
+        fd.append('language', 'ko');
+        const res = await fetch(API+'/transcribe', {method:'POST', body:fd});
+        if(res.ok){ const d = await res.json(); text = d.text||''; }
+      }catch(e){}
+
+      // 폴백: Web Speech API (재녹음 방식)
+      if(!text) text = await vbWebSpeechFallback();
+
+      statusEl.textContent = '';
+      if(text){
+        vbAddUser(text);
+        await vbHandleCommand(text);
+      } else {
+        vbAddBot('잘 못 알아들었어요. 다시 말씀해 주세요.');
+        vbSpeak('다시 한번 말씀해 주세요.');
+      }
+    }
+
+    function vbWebSpeechFallback(){
+      return new Promise(resolve=>{
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if(!SR){ resolve(''); return; }
+        const rec = new SR();
+        rec.lang='ko-KR'; rec.continuous=false; rec.interimResults=false;
+        let done=false;
+        rec.onresult=e=>{ done=true; resolve(e.results[0][0].transcript); };
+        rec.onerror=()=>{ if(!done) resolve(''); };
+        rec.onend=()=>{ if(!done) resolve(''); };
+        rec.start();
+        setTimeout(()=>{ if(!done){ rec.stop(); resolve(''); }}, 8000);
+      });
+    }
+
+    // (3) 의도 파악 (규칙 기반)
+    async function vbHandleCommand(text){
+      const intent = vbParseIntent(text);
+      switch(intent.action){
+        case 'query': await vbQueryEvents(intent); break;
+        case 'add':   await vbAddEvent(intent, text); break;
+        case 'delete':
+          vbAddBot('일정 삭제는 캘린더에서 직접 해주세요.');
+          vbSpeak('일정 삭제는 캘린더에서 직접 해주세요.');
+          break;
+        default:
+          vbAddBot('"오늘 일정 알려줘" 또는 "내일 병원 등록해줘"처럼 말해보세요.');
+          vbSpeak('오늘 일정 알려줘, 처럼 말해보세요.');
+      }
+    }
+
+    function vbParseIntent(text){
+      if(/일정.*알려|뭐.*있|있.*뭐|확인|조회/.test(text))
+        return {action:'query', when: vbParseWhen(text)};
+      if(/등록|넣어|추가|잡아|해\s*줘/.test(text))
+        return {action:'add', dates: vbParseDateRange(text), eventText: vbExtractText(text)};
+      if(/삭제|지워|취소/.test(text)) return {action:'delete'};
+      // 날짜+내용이면 등록으로 간주
+      const dates = vbParseDateRange(text);
+      const et = vbExtractText(text);
+      if(dates.startDate && et) return {action:'add', dates, eventText: et};
+      return {action:'unknown'};
+    }
+
+    // (4) 날짜 파싱
+    function vbParseWhen(text){
+      if(/오늘/.test(text)) return 'today';
+      if(/내일/.test(text)) return 'tomorrow';
+      if(/모레/.test(text)) return 'dayafter';
+      if(/이번\s*주/.test(text)) return 'thisweek';
+      if(/다음\s*주/.test(text)) return 'nextweek';
+      if(/이번\s*달/.test(text)) return 'thismonth';
+      const m = text.match(/(\d{1,2})월\s*(\d{1,2})일/);
+      if(m) return `${new Date().getFullYear()}-${vbPad(m[1])}-${vbPad(m[2])}`;
+      return 'today';
+    }
+
+    function vbParseDateRange(text){
+      const yr = new Date().getFullYear();
+      // "N월 M일부터 E월 R일까지"
+      let m = text.match(/(\d{1,2})월\s*(\d{1,2})일.*?(?:부터|에서|~)\s*(\d{1,2})월\s*(\d{1,2})일/);
+      if(m) return {startDate:`${yr}-${vbPad(m[1])}-${vbPad(m[2])}`, endDate:`${yr}-${vbPad(m[3])}-${vbPad(m[4])}`};
+      // "N월 M일부터 R일까지" (같은 달)
+      m = text.match(/(\d{1,2})월\s*(\d{1,2})일.*?(?:부터|에서|~)\s*(\d{1,2})일/);
+      if(m) return {startDate:`${yr}-${vbPad(m[1])}-${vbPad(m[2])}`, endDate:`${yr}-${vbPad(m[1])}-${vbPad(m[3])}`};
+      // "N월 M일" (단일)
+      m = text.match(/(\d{1,2})월\s*(\d{1,2})일/);
+      if(m) return {startDate:`${yr}-${vbPad(m[1])}-${vbPad(m[2])}`, endDate:`${yr}-${vbPad(m[1])}-${vbPad(m[2])}`};
+      // 상대 날짜
+      const rel = vbRelDate(text);
+      if(rel){ const d=vbFmt(rel); return {startDate:d, endDate:d}; }
+      return {startDate:null, endDate:null};
+    }
+
+    function vbRelDate(text){
+      const t=new Date();
+      if(/오늘/.test(text)) return t;
+      if(/내일/.test(text)) return vbAddDays(t,1);
+      if(/모레/.test(text)) return vbAddDays(t,2);
+      const dm=text.match(/다음\s*주\s*(월|화|수|목|금|토|일)/);
+      if(dm){const map={월:1,화:2,수:3,목:4,금:5,토:6,일:0}; return vbAddDays(t,((map[dm[1]]-t.getDay()+7)%7)+7);}
+      const tw=text.match(/이번\s*주\s*(월|화|수|목|금|토|일)/);
+      if(tw){const map={월:1,화:2,수:3,목:4,금:5,토:6,일:0}; return vbAddDays(t,((map[tw[1]]-t.getDay()+7)%7));}
+      return null;
+    }
+
+    function vbExtractText(text){
+      return text
+        .replace(/\d{1,2}월\s*\d{1,2}일/g,'')
+        .replace(/부터|까지|에서|에|~|등록|넣어|추가|잡아|해\s*줘|해줘|일정|좀|요|을|를|이|가|오늘|내일|모레/g,'')
+        .replace(/다음\s*주\s*(월|화|수|목|금|토|일)요?일?/g,'')
+        .replace(/이번\s*주\s*(월|화|수|목|금|토|일)요?일?/g,'')
+        .trim();
+    }
+
+    // (5) 일정 조회
+    async function vbQueryEvents(intent){
+      try{
+        const res = await fetch(API+'/events?prefix='+PREFIX);
+        if(!res.ok) throw new Error();
+        const events = await res.json();
+        const {start,end} = vbGetRange(intent.when);
+        const filtered = events.filter(e=> e.startDate<=end && (e.endDate||e.startDate)>=start);
+        const label = vbWhenLabel(intent.when);
+        if(!filtered.length){
+          vbAddBot(`${label} 일정이 없어요.`);
+          vbSpeak(`${label} 일정이 없어요.`);
+        } else {
+          let msg = `${label} 일정 ${filtered.length}개:\n`;
+          const sp = [`${label} 일정이 ${filtered.length}개 있어요.`];
+          filtered.forEach((e,i)=>{ msg+=`${i+1}. ${e.text} (${e.user})\n`; sp.push(`${i+1}번, ${e.text}`); });
+          vbAddBot(msg);
+          vbSpeak(sp.join('. '));
+        }
+      }catch(e){
+        vbAddBot('일정을 불러오지 못했어요.');
+        vbSpeak('일정을 불러오지 못했어요.');
+      }
+    }
+
+    function vbGetRange(when){
+      const t=new Date(), ts=vbFmt(t);
+      switch(when){
+        case 'today': return {start:ts,end:ts};
+        case 'tomorrow':{const d=vbFmt(vbAddDays(t,1));return{start:d,end:d};}
+        case 'dayafter':{const d=vbFmt(vbAddDays(t,2));return{start:d,end:d};}
+        case 'thisweek':{const m=vbAddDays(t,-(t.getDay()||7)+1);return{start:vbFmt(m),end:vbFmt(vbAddDays(m,6))};}
+        case 'nextweek':{const m=vbAddDays(t,7-(t.getDay()||7)+1);return{start:vbFmt(m),end:vbFmt(vbAddDays(m,6))};}
+        case 'thismonth':{
+          const s=`${t.getFullYear()}-${vbPad(t.getMonth()+1)}-01`;
+          const ld=new Date(t.getFullYear(),t.getMonth()+1,0).getDate();
+          return{start:s,end:`${t.getFullYear()}-${vbPad(t.getMonth()+1)}-${vbPad(ld)}`};
+        }
+        default: if(/^\d{4}-/.test(when)) return{start:when,end:when}; return{start:ts,end:ts};
+      }
+    }
+
+    function vbWhenLabel(w){
+      return {today:'오늘',tomorrow:'내일',dayafter:'모레',thisweek:'이번 주',nextweek:'다음 주',thismonth:'이번 달'}[w]||w;
+    }
+
+    // (6) 일정 등록
+    async function vbAddEvent(intent, raw){
+      const {startDate,endDate} = intent.dates||{};
+      const eventText = intent.eventText || vbExtractText(raw);
+      if(!startDate){ vbAddBot('날짜를 알아듣지 못했어요.'); vbSpeak('날짜를 알아듣지 못했어요.'); return; }
+      if(!eventText){ vbAddBot('어떤 일정인지 알아듣지 못했어요.'); vbSpeak('어떤 일정인지 알아듣지 못했어요.'); return; }
+      const dateLabel = startDate===endDate ? startDate : `${startDate} ~ ${endDate}`;
+      try{
+        const ev = {
+          id: Date.now().toString(36)+Math.random().toString(36).slice(2,7),
+          user: currentUser||'음성도우미',
+          color: currentUserColor||'#4a90d9',
+          text: eventText,
+          startDate, endDate: endDate||startDate,
+          from:'', to:'', important:false
+        };
+        const res = await fetch(API+'/events?prefix='+PREFIX, {
+          method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(ev)
+        });
+        if(res.ok){
+          // 캐시 갱신 + 화면 다시 그리기
+          cache.events.push(ev);
+          renderCalendar(); renderEvents();
+          const msg = `✅ ${dateLabel}에 "${eventText}" 등록했어요!`;
+          vbAddBot(msg); vbSpeak(`${dateLabel}에 ${eventText} 등록했어요.`);
+        } else throw new Error();
+      }catch(e){ vbAddBot('등록 실패. 다시 시도해 주세요.'); vbSpeak('등록에 실패했어요.'); }
+    }
+
+    // (7) TTS
+    function vbSpeak(text){
+      if(!window.speechSynthesis) return;
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang='ko-KR'; u.rate=0.85; u.pitch=1.0;
+      const voices = speechSynthesis.getVoices();
+      const ko = voices.find(v=>v.lang.startsWith('ko'));
+      if(ko) u.voice = ko;
+      speechSynthesis.speak(u);
+    }
+
+    // 유틸
+    function vbAddBot(t){ const d=document.createElement('div');d.className='vb-msg bot';d.textContent=t;d.style.whiteSpace='pre-line';chatEl.appendChild(d);chatEl.scrollTop=chatEl.scrollHeight; }
+    function vbAddUser(t){ const d=document.createElement('div');d.className='vb-msg user';d.textContent=t;chatEl.appendChild(d);chatEl.scrollTop=chatEl.scrollHeight; }
+    function vbFmt(d){ return `${d.getFullYear()}-${vbPad(d.getMonth()+1)}-${vbPad(d.getDate())}`; }
+    function vbAddDays(d,n){ const r=new Date(d);r.setDate(r.getDate()+n);return r; }
+    function vbPad(n){ return String(n).padStart(2,'0'); }
   })();
 })();

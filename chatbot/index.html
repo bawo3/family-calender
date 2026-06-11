@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>🎤 음성 도우미</title>
+<link rel="stylesheet" href="chatbot.css">
+</head>
+<body>
+
+<div id="app">
+  <!-- 헤더 -->
+  <header id="header">
+    <h1>🗓️ 일정 도우미</h1>
+    <select id="prefix-select">
+      <option value="family">👨‍👩‍👧‍👦 가족</option>
+      <option value="hyeju">💕 JHJ쀼♥</option>
+    </select>
+  </header>
+
+  <!-- 대화 영역 -->
+  <div id="chat-area">
+    <div class="msg bot">
+      안녕하세요! 🎤 마이크 버튼을 누르고 말씀해 주세요.<br><br>
+      <strong>이렇게 말해보세요:</strong><br>
+      • "오늘 일정 알려줘"<br>
+      • "내일 일정 뭐 있어?"<br>
+      • "6월 15일에 병원 등록해줘"<br>
+      • "6월 20일부터 25일까지 여행 넣어줘"
+    </div>
+  </div>
+
+  <!-- 마이크 버튼 (항상 하단 고정) -->
+  <div id="mic-area">
+    <button id="mic-btn" aria-label="음성 입력">
+      <span class="mic-icon">🎤</span>
+      <span class="mic-label">누르고 말하세요</span>
+    </button>
+    <div id="status-text"></div>
+  </div>
+</div>
+
+<script src="chatbot.js"></script>
+</body>
+</html>

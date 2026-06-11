@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init *)",
+      "Bash(git remote *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(curl *)",
+      "Bash(git commit -m 'fix: 날짜 2번째 클릭 버블링 문제 수정 \\(stopPropagation 추가\\) *)",
+      "Bash(git commit -m 'fix: 날짜 2탭 선택 로직 재작성 \\(mouseenter 클릭 유실 문제 해결\\) *)",
+      "Bash(git commit *)",
+      "Bash(node -e ' *)",
+      "Bash(node --input-type=module)",
+      "Bash(node -e \"require\\('acorn'\\).parse\\(require\\('fs'\\).readFileSync\\('common/calendar.js','utf8'\\),{ecmaVersion:2022}\\); console.log\\('파싱 성공'\\);\")",
+      "Bash(vercel --version)",
+      "PowerShell(vercel *)",
+      "Bash(node --check \"C:\\\\Users\\\\bawo3\\\\OneDrive\\\\Desktop\\\\0507\\\\context\\\\common\\\\calendar.js\")"
+    ]
+  }
+}
