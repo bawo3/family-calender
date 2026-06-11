@@ -3278,7 +3278,7 @@
         vbSpeechResult = '';
         micBtn.classList.add('listening');
         micBtn.querySelector('.vb-mic-label').textContent = '듣고 있어요...';
-        statusEl.textContent = '말씀하세요 (4초 무음 시 자동 종료)';
+        statusEl.textContent = '말씀하세요 (2초 무음 시 자동 종료)';
 
         // (a) MediaRecorder
         vbChunks = [];
@@ -3298,7 +3298,7 @@
         // (b) Web Speech API 동시 실행
         vbStartWebSpeech();
 
-        // (c) 4초 무음 자동 종료 — 오디오 볼륨 감지
+        // (c) 2초 무음 자동 종료 — 오디오 볼륨 감지
         vbStartSilenceDetection(stream);
 
         // (d) 최대 15초 안전장치
@@ -3328,7 +3328,7 @@
       try{ vbRecognition.start(); }catch(e){}
     }
 
-    // 4초 동안 일정 음량 이하면 자동 종료
+    // 2초 동안 일정 음량 이하면 자동 종료
     function vbStartSilenceDetection(stream){
       try{
         vbAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
