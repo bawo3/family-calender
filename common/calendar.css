@@ -432,6 +432,23 @@ body.font-xxl .event-panel h2{font-size:26px;}
 /* =========================================
    음성 봇 오버레이 스타일
    ========================================= */
+/* 플로팅 마이크 버튼 (드래그 가능) */
+.voice-fab{
+  position:fixed;
+  right:20px;bottom:90px;
+  width:64px;height:64px;border-radius:50%;
+  background:var(--accent);color:#fff;
+  border:none;font-size:1.8rem;
+  cursor:grab;
+  box-shadow:0 6px 20px rgba(0,0,0,0.25);
+  z-index:9990;
+  display:flex;align-items:center;justify-content:center;
+  user-select:none;touch-action:none;
+  transition:transform 0.2s,box-shadow 0.2s;
+}
+.voice-fab:hover{transform:scale(1.08);box-shadow:0 8px 25px rgba(0,0,0,0.3);}
+.voice-fab:active{cursor:grabbing;transform:scale(0.95);}
+
 .voice-bot-overlay{
   position:fixed;inset:0;background:rgba(0,0,0,0.5);
   display:flex;align-items:flex-end;justify-content:center;

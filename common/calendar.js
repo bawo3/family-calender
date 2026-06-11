@@ -292,7 +292,6 @@
         <button class="u-btn" id="alarmBtn" title="중요일정 알림 설정">🔕</button>
         <button class="u-btn" id="noticeBtn">📢</button>
         <button class="u-btn" id="anniversaryBtn" title="기념일/생일 관리">💗</button>
-        <button class="u-btn" id="voiceBotBtn" title="음성 도우미">🎤</button>
       </div>
     </div>
   </div>
@@ -3036,14 +3035,12 @@
 
   // -----------------------------------------
   // ★★ 음성 봇 모듈 (Groq Whisper STT + 규칙 기반 NLU + TTS) ★★
-  // 캘린더 화면의 🎤 버튼으로 호출
+  // 플로팅 마이크 버튼 — 드래그로 위치 이동 가능
   // -----------------------------------------
   (function initVoiceBot(){
-    const voiceBtn = document.getElementById('voiceBotBtn');
-    if(!voiceBtn) return;
-
-    // 음성 봇 팝업 오버레이 HTML
+    // 음성 봇 HTML — 플로팅 버튼 + 팝업 오버레이
     const voiceHTML = `
+<button id="voiceFab" class="voice-fab" title="음성 도우미" aria-label="음성 도우미">🎤</button>
 <div id="voiceBotOverlay" class="voice-bot-overlay hidden">
   <div class="voice-bot-panel">
     <div class="voice-bot-header">
@@ -3052,10 +3049,11 @@
     </div>
     <div class="voice-bot-chat" id="voiceBotChat">
       <div class="vb-msg bot">
-        안녕하세요! 마이크 버튼을 누르고 말해 주세요.<br>
+        안녕하세요! 마이크를 누르고 말해 주세요.<br>
         • "오늘 일정 알려줘"<br>
         • "내일 병원 등록해줘"<br>
-        • "6월 20일부터 25일까지 여행 넣어줘"
+        • "6월 20일부터 3일간 여행 등록해줘"<br>
+        • "7월 1일부터 2주간 출장 넣어줘"
       </div>
     </div>
     <div class="voice-bot-mic-area">
@@ -3069,25 +3067,81 @@
 </div>`;
     document.body.insertAdjacentHTML('beforeend', voiceHTML);
 
+    const fab = document.getElementById('voiceFab');
     const overlay = document.getElementById('voiceBotOverlay');
     const closeBtn = document.getElementById('voiceBotClose');
     const micBtn = document.getElementById('voiceBotMic');
     const chatEl = document.getElementById('voiceBotChat');
     const statusEl = document.getElementById('voiceBotStatus');
 
-    // 열기/닫기
-    voiceBtn.addEventListener('click', ()=> overlay.classList.remove('hidden'));
+    // ===== 플로팅 버튼 위치 복원/저장 =====
+    const FAB_POS_KEY = `${PREFIX}_voice_fab_pos`;
+    try{
+      const saved = JSON.parse(localStorage.getItem(FAB_POS_KEY)||'null');
+      if(saved){ fab.style.left = saved.left; fab.style.top = saved.top; fab.style.right='auto'; fab.style.bottom='auto'; }
+    }catch(e){}
+
+    // ===== 플로팅 버튼 드래그 처리 =====
+    let dragStartX=0, dragStartY=0, fabStartX=0, fabStartY=0, dragMoved=false, dragging=false;
+
+    function onDragStart(clientX, clientY){
+      const rect = fab.getBoundingClientRect();
+      fabStartX = rect.left; fabStartY = rect.top;
+      dragStartX = clientX; dragStartY = clientY;
+      dragMoved = false; dragging = true;
+      fab.style.transition = 'none';
+    }
+    function onDragMove(clientX, clientY){
+      if(!dragging) return;
+      const dx = clientX - dragStartX, dy = clientY - dragStartY;
+      if(Math.abs(dx)>4 || Math.abs(dy)>4) dragMoved = true;
+      if(!dragMoved) return;
+      const nx = Math.max(0, Math.min(window.innerWidth - fab.offsetWidth, fabStartX + dx));
+      const ny = Math.max(0, Math.min(window.innerHeight - fab.offsetHeight, fabStartY + dy));
+      fab.style.left = nx + 'px';
+      fab.style.top = ny + 'px';
+      fab.style.right = 'auto'; fab.style.bottom = 'auto';
+    }
+    function onDragEnd(){
+      if(!dragging) return;
+      dragging = false;
+      fab.style.transition = '';
+      if(dragMoved){
+        // 위치 저장
+        localStorage.setItem(FAB_POS_KEY, JSON.stringify({left: fab.style.left, top: fab.style.top}));
+      }
+    }
+
+    // 마우스
+    fab.addEventListener('mousedown', e=>{ onDragStart(e.clientX, e.clientY); });
+    window.addEventListener('mousemove', e=>{ onDragMove(e.clientX, e.clientY); });
+    window.addEventListener('mouseup', onDragEnd);
+    // 터치
+    fab.addEventListener('touchstart', e=>{ const t=e.touches[0]; onDragStart(t.clientX, t.clientY); }, {passive:true});
+    window.addEventListener('touchmove', e=>{ if(dragging){ const t=e.touches[0]; onDragMove(t.clientX, t.clientY); }}, {passive:true});
+    window.addEventListener('touchend', onDragEnd);
+
+    // 클릭 (드래그가 아니었을 때만 열기)
+    fab.addEventListener('click', e=>{
+      if(dragMoved){ e.preventDefault(); return; }
+      overlay.classList.remove('hidden');
+    });
     closeBtn.addEventListener('click', ()=> overlay.classList.add('hidden'));
 
-    // 녹음 상태
+    // ===== 녹음 상태 =====
     let vbRecorder = null;
     let vbChunks = [];
     let vbListening = false;
-    let vbSpeechResult = ''; // Web Speech 실시간 결과 보관
+    let vbSpeechResult = '';
+    let vbSilenceTimer = null;     // 4초 무음 감지 타이머
+    let vbAudioCtx = null;
+    let vbAnalyser = null;
+    let vbRafId = null;
+    let vbPendingIntent = null;    // 확인 질문 대기 중인 의도
 
     micBtn.addEventListener('click', vbStartListening);
 
-    // (1) 녹음 시작/중지 — Web Speech API를 동시에 실행
+    // (1) 녹음 시작/중지
     async function vbStartListening(){
       if(vbListening){ vbStopListening(); return; }
       try{
@@ -3096,9 +3150,9 @@
         vbSpeechResult = '';
         micBtn.classList.add('listening');
         micBtn.querySelector('.vb-mic-label').textContent = '듣고 있어요...';
-        statusEl.textContent = '말씀 끝나면 버튼을 다시 눌러주세요';
+        statusEl.textContent = '말씀하세요 (4초 무음 시 자동 종료)';
 
-        // (a) MediaRecorder로 오디오 녹음 (Groq 전송용)
+        // (a) MediaRecorder
         vbChunks = [];
         const mime = ['audio/webm;codecs=opus','audio/webm','audio/mp4']
           .find(t=>MediaRecorder.isTypeSupported(t)) || 'audio/webm';
@@ -3106,15 +3160,20 @@
         vbRecorder.ondataavailable = e=>{ if(e.data.size>0) vbChunks.push(e.data); };
         vbRecorder.onstop = async()=>{
           stream.getTracks().forEach(t=>t.stop());
+          if(vbAudioCtx){ try{ vbAudioCtx.close(); }catch(e){} vbAudioCtx=null; }
+          if(vbRafId){ cancelAnimationFrame(vbRafId); vbRafId=null; }
           const blob = new Blob(vbChunks, {type: vbRecorder.mimeType});
           await vbProcessAudio(blob);
         };
         vbRecorder.start();
 
-        // (b) Web Speech API 실시간 인식 (동시 실행 — 폴백 겸 즉시 결과)
+        // (b) Web Speech API 동시 실행
         vbStartWebSpeech();
 
-        // (c) 최대 15초 자동 종료
+        // (c) 4초 무음 자동 종료 — 오디오 볼륨 감지
+        vbStartSilenceDetection(stream);
+
+        // (d) 최대 15초 안전장치
         setTimeout(()=>{ if(vbListening) vbStopListening(); }, 15000);
       } catch(e){
         vbAddBot('마이크 권한을 허용해 주세요.');
@@ -3141,22 +3200,57 @@
       try{ vbRecognition.start(); }catch(e){}
     }
 
+    // 4초 동안 일정 음량 이하면 자동 종료
+    function vbStartSilenceDetection(stream){
+      try{
+        vbAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const src = vbAudioCtx.createMediaStreamSource(stream);
+        vbAnalyser = vbAudioCtx.createAnalyser();
+        vbAnalyser.fftSize = 1024;
+        src.connect(vbAnalyser);
+        const buf = new Uint8Array(vbAnalyser.fftSize);
+        const SILENCE_THRESHOLD = 0.015; // RMS 임계값
+        const SILENCE_DURATION = 4000;   // 4초
+        let silenceStart = null;
+        let everSpoke = false;
+
+        function tick(){
+          if(!vbListening) return;
+          vbAnalyser.getByteTimeDomainData(buf);
+          // RMS 계산
+          let sum=0;
+          for(let i=0;i<buf.length;i++){ const v=(buf[i]-128)/128; sum+=v*v; }
+          const rms = Math.sqrt(sum/buf.length);
+
+          if(rms > SILENCE_THRESHOLD){
+            everSpoke = true;
+            silenceStart = null; // 소리 들리면 리셋
+          } else if(everSpoke) {
+            // 말을 하다가 멈춘 경우만 카운트
+            if(silenceStart === null) silenceStart = performance.now();
+            else if(performance.now() - silenceStart > SILENCE_DURATION){
+              vbStopListening();
+              return;
+            }
+          }
+          vbRafId = requestAnimationFrame(tick);
+        }
+        vbRafId = requestAnimationFrame(tick);
+      }catch(e){ /* AudioContext 미지원 */ }
+    }
+
     function vbStopListening(){
       vbListening = false;
       micBtn.classList.remove('listening');
       micBtn.querySelector('.vb-mic-label').textContent = '누르고 말하세요';
       statusEl.textContent = '인식 중...';
-      // Web Speech 중지
       if(vbRecognition){ try{ vbRecognition.stop(); }catch(e){} vbRecognition=null; }
-      // MediaRecorder 중지 → onstop에서 processAudio 호출
       if(vbRecorder && vbRecorder.state==='recording') vbRecorder.stop();
     }
 
-    // (2) STT 처리: Groq 우선, 실패 시 Web Speech 결과 사용
+    // (2) STT 처리
     async function vbProcessAudio(blob){
       let text = '';
-
-      // (a) Groq Whisper 시도
       try{
         const fd = new FormData();
         fd.append('file', blob, 'audio.webm');
@@ -3164,8 +3258,6 @@
         const res = await fetch(API+'/transcribe', {method:'POST', body:fd});
         if(res.ok){ const d = await res.json(); text = d.text||''; }
       }catch(e){}
-
-      // (b) Groq 실패 시 Web Speech 실시간 결과 사용
       if(!text && vbSpeechResult) text = vbSpeechResult;
 
       statusEl.textContent = '';
@@ -3178,12 +3270,42 @@
       }
     }
 
-    // (3) 의도 파악 (규칙 기반)
+    // (3) 의도 파악
     async function vbHandleCommand(text){
+      // 이전에 확인 질문이 떠 있다면 yes/no 처리
+      if(vbPendingIntent){
+        if(/응|예|네|맞|좋|그래|어/.test(text)){
+          const pend = vbPendingIntent; vbPendingIntent = null;
+          await vbExecuteIntent(pend);
+          return;
+        }
+        if(/아니|아냐|취소|싫|말|아닙/.test(text)){
+          vbPendingIntent = null;
+          vbAddBot('알겠어요. 취소했어요.');
+          vbSpeak('알겠어요. 취소했어요.');
+          return;
+        }
+        // 둘 다 아니면 그냥 새 명령으로 처리
+        vbPendingIntent = null;
+      }
+
       const intent = vbParseIntent(text);
+
+      // 짧은 명령(동사 생략) 확인 질문
+      if(intent.action==='query' && intent.short){
+        vbPendingIntent = intent;
+        const label = vbWhenLabel(intent.when);
+        const q = `${label} 일정을 알려드릴까요? (예/아니오)`;
+        vbAddBot(q); vbSpeak(q);
+        return;
+      }
+      await vbExecuteIntent(intent);
+    }
+
+    async function vbExecuteIntent(intent){
       switch(intent.action){
         case 'query': await vbQueryEvents(intent); break;
-        case 'add':   await vbAddEvent(intent, text); break;
+        case 'add':   await vbAddEvent(intent); break;
         case 'delete':
           vbAddBot('일정 삭제는 캘린더에서 직접 해주세요.');
           vbSpeak('일정 삭제는 캘린더에서 직접 해주세요.');
@@ -3195,15 +3317,31 @@
     }
 
     function vbParseIntent(text){
-      if(/일정.*알려|뭐.*있|있.*뭐|확인|조회/.test(text))
-        return {action:'query', when: vbParseWhen(text)};
-      if(/등록|넣어|추가|잡아|해\s*줘/.test(text))
+      const hasWhen = /오늘|내일|모레|이번\s*주|다음\s*주|이번\s*달|\d{1,2}월\s*\d{1,2}일/.test(text);
+      const hasQueryVerb = /알려|뭐.*있|있.*뭐|확인|조회/.test(text);
+      const hasAddVerb = /등록|넣어|추가|잡아|해\s*줘/.test(text);
+
+      // 등록 명령
+      if(hasAddVerb){
         return {action:'add', dates: vbParseDateRange(text), eventText: vbExtractText(text)};
+      }
+      // 삭제
       if(/삭제|지워|취소/.test(text)) return {action:'delete'};
+      // 명시적 조회
+      if(hasQueryVerb && hasWhen){
+        return {action:'query', when: vbParseWhen(text)};
+      }
+      // 짧은 조회 ("오늘 일정", "내일 일정" 등) — 동사 없이도 일정 단어 + 시점만 있으면 확인 질문
+      if(hasWhen && /일정/.test(text)){
+        return {action:'query', when: vbParseWhen(text), short: true};
+      }
       // 날짜+내용이면 등록으로 간주
       const dates = vbParseDateRange(text);
       const et = vbExtractText(text);
       if(dates.startDate && et) return {action:'add', dates, eventText: et};
+      // 시점만 있어도 조회 추정
+      if(hasWhen) return {action:'query', when: vbParseWhen(text), short: true};
+
       return {action:'unknown'};
     }
 
@@ -3222,16 +3360,46 @@
 
     function vbParseDateRange(text){
       const yr = new Date().getFullYear();
-      // "N월 M일부터 E월 R일까지"
-      let m = text.match(/(\d{1,2})월\s*(\d{1,2})일.*?(?:부터|에서|~)\s*(\d{1,2})월\s*(\d{1,2})일/);
+
+      // (a) "N월 M일부터 X일간/X주간/X달간" — 기간 단위 자동 계산
+      let m = text.match(/(\d{1,2})월\s*(\d{1,2})일.*?부터\s*(\d{1,2})\s*(일간|일\s*동안|주간|주\s*동안|달간|개월간|개월\s*동안|달\s*동안)/);
+      if(m){
+        const startD = new Date(yr, parseInt(m[1])-1, parseInt(m[2]));
+        const cnt = parseInt(m[3]);
+        const unit = m[4];
+        let endD = new Date(startD);
+        if(/일/.test(unit)) endD.setDate(startD.getDate() + cnt - 1);
+        else if(/주/.test(unit)) endD.setDate(startD.getDate() + cnt*7 - 1);
+        else if(/달|개월/.test(unit)){ endD.setMonth(startD.getMonth() + cnt); endD.setDate(endD.getDate() - 1); }
+        return {startDate: vbFmt(startD), endDate: vbFmt(endD)};
+      }
+
+      // (b) "오늘/내일/X월 X일부터 X일간/X주간/X달간"
+      m = text.match(/(오늘|내일|모레)부터\s*(\d{1,2})\s*(일간|일\s*동안|주간|주\s*동안|달간|개월간|개월\s*동안|달\s*동안)/);
+      if(m){
+        const baseRel = vbRelDate(m[1]) || new Date();
+        const cnt = parseInt(m[2]);
+        const unit = m[3];
+        let endD = new Date(baseRel);
+        if(/일/.test(unit)) endD.setDate(baseRel.getDate() + cnt - 1);
+        else if(/주/.test(unit)) endD.setDate(baseRel.getDate() + cnt*7 - 1);
+        else if(/달|개월/.test(unit)){ endD.setMonth(baseRel.getMonth() + cnt); endD.setDate(endD.getDate() - 1); }
+        return {startDate: vbFmt(baseRel), endDate: vbFmt(endD)};
+      }
+
+      // (c) "N월 M일부터 E월 R일까지"
+      m = text.match(/(\d{1,2})월\s*(\d{1,2})일.*?(?:부터|에서|~)\s*(\d{1,2})월\s*(\d{1,2})일/);
       if(m) return {startDate:`${yr}-${vbPad(m[1])}-${vbPad(m[2])}`, endDate:`${yr}-${vbPad(m[3])}-${vbPad(m[4])}`};
-      // "N월 M일부터 R일까지" (같은 달)
+
+      // (d) "N월 M일부터 R일까지" (같은 달)
       m = text.match(/(\d{1,2})월\s*(\d{1,2})일.*?(?:부터|에서|~)\s*(\d{1,2})일/);
       if(m) return {startDate:`${yr}-${vbPad(m[1])}-${vbPad(m[2])}`, endDate:`${yr}-${vbPad(m[1])}-${vbPad(m[3])}`};
-      // "N월 M일" (단일)
+
+      // (e) "N월 M일" 단일
       m = text.match(/(\d{1,2})월\s*(\d{1,2})일/);
       if(m) return {startDate:`${yr}-${vbPad(m[1])}-${vbPad(m[2])}`, endDate:`${yr}-${vbPad(m[1])}-${vbPad(m[2])}`};
-      // 상대 날짜
+
+      // (f) 상대 날짜
       const rel = vbRelDate(text);
       if(rel){ const d=vbFmt(rel); return {startDate:d, endDate:d}; }
       return {startDate:null, endDate:null};
@@ -3252,13 +3420,14 @@
     function vbExtractText(text){
       return text
         .replace(/\d{1,2}월\s*\d{1,2}일/g,'')
-        .replace(/부터|까지|에서|에|~|등록|넣어|추가|잡아|해\s*줘|해줘|일정|좀|요|을|를|이|가|오늘|내일|모레/g,'')
+        .replace(/\d{1,2}\s*(?:일간|일\s*동안|주간|주\s*동안|달간|개월간|개월\s*동안|달\s*동안)/g,'')
+        .replace(/부터|까지|에서|~|등록|넣어|추가|잡아|해\s*줘|해줘|일정|좀|요|을|를|이|가|오늘|내일|모레|에/g,'')
         .replace(/다음\s*주\s*(월|화|수|목|금|토|일)요?일?/g,'')
         .replace(/이번\s*주\s*(월|화|수|목|금|토|일)요?일?/g,'')
         .trim();
     }
 
-    // (5) 일정 조회
+    // (5) 일정 조회 — "누구의 ~ 일정이 ~ 있어요" 형식
     async function vbQueryEvents(intent){
       try{
         const res = await fetch(API+'/events?prefix='+PREFIX);
@@ -3268,15 +3437,28 @@
         const filtered = events.filter(e=> e.startDate<=end && (e.endDate||e.startDate)>=start);
         const label = vbWhenLabel(intent.when);
         if(!filtered.length){
-          vbAddBot(`${label} 일정이 없어요.`);
-          vbSpeak(`${label} 일정이 없어요.`);
-        } else {
-          let msg = `${label} 일정 ${filtered.length}개:\n`;
-          const sp = [`${label} 일정이 ${filtered.length}개 있어요.`];
-          filtered.forEach((e,i)=>{ msg+=`${i+1}. ${e.text} (${e.user})\n`; sp.push(`${i+1}번, ${e.text}`); });
-          vbAddBot(msg);
-          vbSpeak(sp.join('. '));
+          vbAddBot(`${label}은(는) 등록된 일정이 없어요.`);
+          vbSpeak(`${label}은 등록된 일정이 없어요.`);
+          return;
         }
+        // 사용자별로 그룹화
+        const byUser = {};
+        filtered.forEach(e=>{
+          const u = e.user || '알 수 없음';
+          if(!byUser[u]) byUser[u] = [];
+          byUser[u].push(e);
+        });
+        // 화면용 메시지
+        let msg = `${label} 일정이에요.\n`;
+        const speakParts = [`${label} 일정을 알려드릴게요.`];
+        Object.keys(byUser).forEach(u=>{
+          const items = byUser[u];
+          const texts = items.map(e=>e.text);
+          msg += `\n👤 ${u}님: ${texts.join(', ')}`;
+          speakParts.push(`${u}님의 일정은 ${texts.join(', ')} 입니다.`);
+        });
+        vbAddBot(msg);
+        vbSpeak(speakParts.join(' '));
       }catch(e){
         vbAddBot('일정을 불러오지 못했어요.');
         vbSpeak('일정을 불러오지 못했어요.');
@@ -3301,13 +3483,18 @@
     }
 
     function vbWhenLabel(w){
-      return {today:'오늘',tomorrow:'내일',dayafter:'모레',thisweek:'이번 주',nextweek:'다음 주',thismonth:'이번 달'}[w]||w;
+      const map = {today:'오늘',tomorrow:'내일',dayafter:'모레',thisweek:'이번 주',nextweek:'다음 주',thismonth:'이번 달'};
+      if(map[w]) return map[w];
+      // 날짜 문자열이면 "M월 D일" 형식으로
+      const m = w && w.match(/^\d{4}-(\d{2})-(\d{2})$/);
+      if(m) return `${parseInt(m[1])}월 ${parseInt(m[2])}일`;
+      return w;
     }
 
     // (6) 일정 등록
-    async function vbAddEvent(intent, raw){
+    async function vbAddEvent(intent){
       const {startDate,endDate} = intent.dates||{};
-      const eventText = intent.eventText || vbExtractText(raw);
+      const eventText = intent.eventText;
       if(!startDate){ vbAddBot('날짜를 알아듣지 못했어요.'); vbSpeak('날짜를 알아듣지 못했어요.'); return; }
       if(!eventText){ vbAddBot('어떤 일정인지 알아듣지 못했어요.'); vbSpeak('어떤 일정인지 알아듣지 못했어요.'); return; }
       const dateLabel = startDate===endDate ? startDate : `${startDate} ~ ${endDate}`;
@@ -3324,7 +3511,6 @@
           method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(ev)
         });
         if(res.ok){
-          // 캐시 갱신 + 화면 다시 그리기
           cache.events.push(ev);
           renderCalendar(); renderEvents();
           const msg = `✅ ${dateLabel}에 "${eventText}" 등록했어요!`;
