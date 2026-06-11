@@ -3629,8 +3629,26 @@
     function vbKorNumToDigit(text){
       const units = {'일':1,'이':2,'삼':3,'사':4,'오':5,'육':6,'칠':7,'팔':8,'구':9};
       const tens  = {'십':10,'이십':20,'삼십':30};
-      // (a) "N십M" 패턴 (예: 이십삼 → 23, 십오 → 15)
       let result = text;
+
+      // (0) 구어체 월 표현 정규화 — "유월" → "육월", "시월" → "십월"
+      result = result.replace(/유월/g, '육월');
+      result = result.replace(/시월/g, '십월');
+
+      // (0-1) 고유어 수사 시간 → 숫자 변환 (열한시→11시, 스물세시→23시)
+      const nativeNums = {
+        '한':1,'두':2,'세':3,'네':4,'다섯':5,
+        '여섯':6,'일곱':7,'여덟':8,'아홉':9,'열':10,
+        '열한':11,'열두':12,'열세':13,'열네':14,'열다섯':15,
+        '열여섯':16,'열일곱':17,'열여덟':18,'열아홉':19,
+        '스물':20,'스물한':21,'스물두':22,'스물세':23,'스물네':24
+      };
+      // "열한시 반" / "두시 삼십분" 등
+      const nativeKeys = Object.keys(nativeNums).sort((a,b)=>b.length-a.length);
+      const nativeRe = new RegExp('(' + nativeKeys.join('|') + ')\\s*시', 'g');
+      result = result.replace(nativeRe, (_, k) => nativeNums[k] + '시');
+
+      // (a) "N십M" 패턴 (예: 이십삼 → 23, 십오 → 15)
       // (a-1) 이십삼, 삼십일 등 → 숫자
       result = result.replace(/(이십|삼십|십)([일이삼사오육칠팔구])?/g, (_, t, u) => {
         let val = tens[t] || 10;
@@ -3644,6 +3662,8 @@
         if(n === '일') return '1일';
         return (units[n]||0) + '일';
       });
+      // (c) 단독 한글 숫자 + "시" (예: 육시→6시, 구시→9시)
+      result = result.replace(/([일이삼사오육칠팔구])시/g, (_, n) => (units[n]||0) + '시');
       return result;
     }
 
@@ -3931,8 +3951,11 @@
           renderCalendar(); renderEvents();
           const msg = `✅ ${dateLabel}${timeLabel}에 "${eventText}" 등록했어요!`;
           vbAddBot(msg); vbSpeak(`${dateLabel}${timeLabel}에 ${eventText} 등록했어요.`);
-        } else throw new Error();
-      }catch(e){ vbAddBot('등록 실패. 다시 시도해 주세요.'); vbSpeak('등록에 실패했어요.'); }
+        } else {
+          const errData = await res.text();
+          throw new Error(errData || '서버 오류');
+        }
+      }catch(e){ vbAddBot('등록 실패: ' + (e.message||'다시 시도해 주세요.')); vbSpeak('등록에 실패했어요.'); }
     }
 
     // (6-1) 반복 일정 등록
