@@ -3454,6 +3454,8 @@
       }
 
       const intent = vbParseIntent(text);
+      // 원본 발화 저장 — 이후 재조립시 사용
+      intent.originalText = text;
 
       // 짧은 명령(동사 생략) 확인 질문
       if(intent.action==='query' && intent.short){
@@ -3473,6 +3475,17 @@
     }
 
     async function vbExecuteIntent(intent){
+      // (a) 등록인데 날짜가 없으면 먼저 날짜 물어보기
+      if(intent.action==='add' && (!intent.dates || !intent.dates.startDate)){
+        vbAskDateForAdd(intent);
+        return;
+      }
+      // (b) 등록인데 내용이 비어있으면 안내 후 종료
+      if(intent.action==='add' && !intent.eventText){
+        const q='무슨 일정을 등록할까요? 다시 말씀해 주세요. 예: "내일 병원 등록해줘"';
+        vbAddBot(q); vbSpeak(q);
+        return;
+      }
       switch(intent.action){
         case 'query':        await vbQueryEvents(intent); break;
         case 'add':          await vbAddEvent(intent); break;
@@ -3480,9 +3493,91 @@
         case 'search':       await vbSearchEvents(intent); break;
         case 'delete':       await vbDeleteEvent(intent); break;
         default:
-          vbAddBot('"오늘 일정 알려줘", "내일 병원 등록해줘", "병원 언제야?", "오늘 회의 삭제", "매주 화요일 약 등록해줘"처럼 말해보세요.');
-          vbSpeak('오늘 일정 알려줘, 처럼 말해보세요.');
+          // 모호한 요청 — 버튼으로 의도 다시 묻기
+          vbAskAction(intent.originalText || '');
       }
+    }
+
+    // 모호한 발화 — 원하는 작업을 버튼으로 선택
+    function vbAskAction(originalText){
+      // (1) 키워드만 추출
+      const kw = vbExtractText(originalText);
+      const hint = kw ? `"${kw}"에 대해 ` : '';
+      const q = `${hint}무엇을 도와드릴까요?`;
+      vbAddBot(q); vbSpeak('무엇을 도와드릴까요?');
+      // (2) 액션 버튼
+      const btns = [
+        {label:'일정 등록',  value:'add'},
+        {label:'일정 조회',  value:'query'},
+        {label:'일정 검색',  value:'search'},
+        {label:'일정 삭제',  value:'delete'},
+        {label:'취소',         value:'cancel'}
+      ];
+      vbAddButtons(btns, async (v)=>{
+        if(v==='cancel'){ vbAddBot('취소했어요.'); vbSpeak('취소했어요.'); return; }
+        // (3) 선택한 액션에 따라 다음 단계 진행
+        if(v==='add'){
+          const intent = {action:'add', dates: vbParseDateRange(originalText), times: vbParseTimeRange(originalText), eventText: kw, originalText};
+          await vbExecuteIntent(intent);  // 날짜 없으면 자동으로 vbAskDateForAdd 호출
+        }
+        else if(v==='query'){
+          // 조회는 날짜만 필요 — 바로 날짜 묻기
+          vbAskWhenForQuery();
+        }
+        else if(v==='search'){
+          if(!kw){ vbAddBot('몇 글자라도 좋으니 찾을 단어를 다시 말씀해 주세요. 예: "병원 찾아줘"'); vbSpeak('찾을 단어를 다시 말씀해 주세요.'); return; }
+          await vbSearchEvents({action:'search', keyword: kw});
+        }
+        else if(v==='delete'){
+          await vbDeleteEvent({action:'delete', dates: vbParseDateRange(originalText), keyword: kw});
+        }
+      });
+    }
+
+    // 등록 — 날짜가 없을 때 날짜 버튼 제시
+    function vbAskDateForAdd(intent){
+      const t = intent.eventText ? `"${intent.eventText}"을(를) ` : '';
+      const q = `${t}언제 등록할까요?`;
+      vbAddBot(q); vbSpeak('언제 등록할까요?');
+      const today = new Date();
+      const sat = vbAddDays(today, (6 - today.getDay() + 7) % 7 || 7); // 다음 토요일 (오늘이 토요면 7일 후)
+      const btns = [
+        {label:'오늘',     value:'today'},
+        {label:'내일',     value:'tomorrow'},
+        {label:'모레',     value:'dayafter'},
+        {label:'이번 주말', value:'thisweekend'},
+        {label:'취소',     value:'cancel'}
+      ];
+      vbAddButtons(btns, async (v)=>{
+        if(v==='cancel'){ vbAddBot('등록을 취소했어요.'); vbSpeak('등록을 취소했어요.'); return; }
+        let d;
+        if(v==='today')      d = new Date();
+        else if(v==='tomorrow') d = vbAddDays(new Date(), 1);
+        else if(v==='dayafter') d = vbAddDays(new Date(), 2);
+        else if(v==='thisweekend') d = sat;
+        const ds = vbFmt(d);
+        intent.dates = {startDate: ds, endDate: ds};
+        await vbExecuteIntent(intent);
+      });
+    }
+
+    // 조회 — 날짜 버튼 제시
+    function vbAskWhenForQuery(){
+      const q = '언제 일정을 볼까요?';
+      vbAddBot(q); vbSpeak(q);
+      const btns = [
+        {label:'오늘',     value:'today'},
+        {label:'내일',     value:'tomorrow'},
+        {label:'마레',     value:'dayafter'},
+        {label:'이번 주',  value:'thisweek'},
+        {label:'이번 달',  value:'thismonth'},
+        {label:'취소',     value:'cancel'}
+      ];
+      vbAddButtons(btns, async (v)=>{
+        if(v==='cancel'){ vbAddBot('알겠어요.'); return; }
+        const whenMap = {today:'today', tomorrow:'tomorrow', dayafter:'dayafter', thisweek:'thisweek', thismonth:'thismonth'};
+        await vbQueryEvents({action:'query', when: whenMap[v]});
+      });
     }
 
     function vbParseIntent(text){
