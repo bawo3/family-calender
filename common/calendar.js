@@ -3275,19 +3275,55 @@
     async function vbHandleCommand(text){
       // 이전에 확인 질문이 떠 있다면 yes/no 처리
       if(vbPendingIntent){
-        if(/응|예|네|맞|좋|그래|어/.test(text)){
+        // 삭제 확인 (단일 후보)
+        if(vbPendingIntent.action === '_doDelete'){
+          if(/응|예|네|맞|좋|그래|어|삭제/.test(text)){
+            const ev = vbPendingIntent.event; vbPendingIntent = null;
+            await vbExecuteDelete(ev);
+            return;
+          }
+          if(/아니|아냐|취소|싫|말|아닙/.test(text)){
+            vbPendingIntent = null;
+            vbAddBot('알겠어요. 삭제를 취소했어요.');
+            vbSpeak('삭제를 취소했어요.');
+            return;
+          }
+          vbPendingIntent = null;
+        }
+        // 삭제 번호 선택 (여러 후보)
+        else if(vbPendingIntent.action === '_chooseDelete'){
+          const numMatch = text.match(/(\d+)\s*번?/);
+          if(numMatch){
+            const idx = parseInt(numMatch[1]) - 1;
+            const cands = vbPendingIntent.candidates;
+            if(idx >= 0 && idx < cands.length){
+              const ev = cands[idx]; vbPendingIntent = null;
+              await vbExecuteDelete(ev);
+              return;
+            }
+          }
+          if(/아니|취소|말|아닙/.test(text)){
+            vbPendingIntent = null;
+            vbAddBot('취소했어요.'); vbSpeak('취소했어요.');
+            return;
+          }
+          vbPendingIntent = null;
+        }
+        // 일반 query 확인
+        else if(/응|예|네|맞|좋|그래|어/.test(text)){
           const pend = vbPendingIntent; vbPendingIntent = null;
           await vbExecuteIntent(pend);
           return;
         }
-        if(/아니|아냐|취소|싫|말|아닙/.test(text)){
+        else if(/아니|아냐|취소|싫|말|아닙/.test(text)){
           vbPendingIntent = null;
           vbAddBot('알겠어요. 취소했어요.');
           vbSpeak('알겠어요. 취소했어요.');
           return;
         }
-        // 둘 다 아니면 그냥 새 명령으로 처리
-        vbPendingIntent = null;
+        else {
+          vbPendingIntent = null;
+        }
       }
 
       const intent = vbParseIntent(text);
@@ -3305,14 +3341,12 @@
 
     async function vbExecuteIntent(intent){
       switch(intent.action){
-        case 'query': await vbQueryEvents(intent); break;
-        case 'add':   await vbAddEvent(intent); break;
-        case 'delete':
-          vbAddBot('일정 삭제는 캘린더에서 직접 해주세요.');
-          vbSpeak('일정 삭제는 캘린더에서 직접 해주세요.');
-          break;
+        case 'query':  await vbQueryEvents(intent); break;
+        case 'add':    await vbAddEvent(intent); break;
+        case 'search': await vbSearchEvents(intent); break;
+        case 'delete': await vbDeleteEvent(intent); break;
         default:
-          vbAddBot('"오늘 일정 알려줘" 또는 "내일 병원 등록해줘"처럼 말해보세요.');
+          vbAddBot('"오늘 일정 알려줘", "내일 병원 등록해줘", "병원 언제야?", "오늘 회의 삭제"처럼 말해보세요.');
           vbSpeak('오늘 일정 알려줘, 처럼 말해보세요.');
       }
     }
@@ -3321,18 +3355,26 @@
       const hasWhen = /오늘|내일|모레|이번\s*주|다음\s*주|이번\s*달|\d{1,2}월\s*\d{1,2}일/.test(text);
       const hasQueryVerb = /알려|뭐.*있|있.*뭐|확인|조회/.test(text);
       const hasAddVerb = /등록|넣어|추가|잡아|해\s*줘/.test(text);
+      const hasDeleteVerb = /삭제|지워|취소/.test(text);
+      const hasSearchVerb = /언제|찾아|찾으|언젠|언제야|언제지|언제더라/.test(text);
 
       // 등록 명령
       if(hasAddVerb){
         return {action:'add', dates: vbParseDateRange(text), times: vbParseTimeRange(text), eventText: vbExtractText(text)};
       }
-      // 삭제
-      if(/삭제|지워|취소/.test(text)) return {action:'delete'};
+      // 삭제 명령 — 키워드로 일정 찾기
+      if(hasDeleteVerb){
+        return {action:'delete', dates: vbParseDateRange(text), keyword: vbExtractText(text)};
+      }
+      // 검색 — "OO 언제야?", "OO 찾아줘"
+      if(hasSearchVerb){
+        return {action:'search', keyword: vbExtractText(text).replace(/언제|찾아|찾으|언젠|야|지|더라/g,'').trim()};
+      }
       // 명시적 조회
       if(hasQueryVerb && hasWhen){
         return {action:'query', when: vbParseWhen(text)};
       }
-      // 짧은 조회 ("오늘 일정", "내일 일정" 등) — 동사 없이도 일정 단어 + 시점만 있으면 확인 질문
+      // 짧은 조회 ("오늘 일정", "내일 일정" 등)
       if(hasWhen && /일정/.test(text)){
         return {action:'query', when: vbParseWhen(text), short: true};
       }
@@ -3419,48 +3461,64 @@
     }
 
     // 시간 파싱 — "오후 3시부터 5시까지", "9시 30분부터 10시까지", "15시부터 17시까지"
+    // 자연 시간("점심에", "저녁에" 등)도 인식
     function vbParseTimeRange(text){
-      // 한자어/숫자 시간 정규식 — "오후 3시 30분", "15시", "9시반"
-      // (오전|오후)? + 숫자(시) + (숫자분|반)? 형태
-      const TIME_RE = /(?:(오전|오후|아침|저녁|밤|낮))?\s*(\d{1,2})\s*시\s*(반|(\d{1,2})\s*분)?/g;
+      // 자연 시간 키워드 → 시각 매핑 (단일 시간이면 1시간 범위로 자동 설정)
+      const NATURAL_TIMES = {
+        '새벽': 5, '아침': 8, '오전': 10,
+        '점심': 12, '낮': 14, '오후': 15,
+        '저녁': 19, '밤': 21, '자정': 0
+      };
+      // 숫자 시간 정규식
+      const TIME_RE = /(?:(오전|오후|아침|저녁|밤|낮|새벽))?\s*(\d{1,2})\s*시\s*(반|(\d{1,2})\s*분)?/g;
       const matches = [];
       let m;
-      // 정규식 상태 리셋
       TIME_RE.lastIndex = 0;
       while((m = TIME_RE.exec(text)) !== null){
-        const period = m[1]; // 오전/오후
+        const period = m[1];
         let hour = parseInt(m[2]);
         let min = 0;
         if(m[3] === '반') min = 30;
         else if(m[4]) min = parseInt(m[4]);
-        // 오후/저녁/밤 보정 (12시간제 → 24시간제)
+        // 오후/저녁/밤 보정
         if(period && /오후|저녁|밤/.test(period) && hour < 12) hour += 12;
-        if(period && /오전|아침/.test(period) && hour === 12) hour = 0;
+        if(period && /오전|아침|새벽/.test(period) && hour === 12) hour = 0;
         if(hour > 23 || min > 59) continue;
         matches.push({hour, min});
       }
-      if(matches.length === 0) return {from:'', to:''};
+
+      // (a) 숫자 시간이 있으면 우선 사용
       if(matches.length === 1){
-        // 단일 시간 — from만 설정
         const a = matches[0];
         return {from: `${a.hour}:${vbPad(a.min)}`, to:''};
       }
-      // 2개 이상이면 첫 번째=시작, 두 번째=종료
-      const a = matches[0], b = matches[1];
-      // 종료가 시작보다 작고 period가 없으면 오후로 추정 (예: 9시부터 5시 → 9~17시는 안됨, 그러나 한국어 화법상 처리)
-      let toHour = b.hour;
-      if(toHour < a.hour && toHour < 12) toHour += 12;
-      return {
-        from: `${a.hour}:${vbPad(a.min)}`,
-        to:   `${toHour}:${vbPad(b.min)}`
-      };
+      if(matches.length >= 2){
+        const a = matches[0], b = matches[1];
+        let toHour = b.hour;
+        if(toHour < a.hour && toHour < 12) toHour += 12;
+        return {from: `${a.hour}:${vbPad(a.min)}`, to: `${toHour}:${vbPad(b.min)}`};
+      }
+
+      // (b) 숫자 시간 없으면 자연 시간 키워드 검사 ("점심에", "저녁에" 등)
+      // "시" 단어가 안 붙은 경우만 (이미 위에서 처리됨)
+      for(const [kw, hour] of Object.entries(NATURAL_TIMES)){
+        // "점심에/저녁에/점심께/점심쯤" 등 패턴
+        const re = new RegExp(`${kw}(?:에|께|쯤|먹고|먹은\\s*뒤|먹은\\s*후)?`);
+        if(re.test(text)){
+          // 단일 자연 시간 → 1시간 범위
+          return {from: `${hour}:00`, to: `${(hour+1)%24}:00`};
+        }
+      }
+
+      return {from:'', to:''};
     }
 
     function vbExtractText(text){
       return text
         .replace(/\d{1,2}월\s*\d{1,2}일/g,'')
         .replace(/\d{1,2}\s*(?:일간|일\s*동안|주간|주\s*동안|달간|개월간|개월\s*동안|달\s*동안)/g,'')
-        .replace(/(?:오전|오후|아침|저녁|밤|낮)?\s*\d{1,2}\s*시\s*(?:반|\d{1,2}\s*분)?/g,'')
+        .replace(/(?:오전|오후|아침|저녁|밤|낮|새벽)?\s*\d{1,2}\s*시\s*(?:반|\d{1,2}\s*분)?/g,'')
+        .replace(/(새벽|아침|오전|점심|낮|오후|저녁|밤|자정)(?:에|께|쯤|먹고|먹은\s*뒤|먹은\s*후)/g,'')
         .replace(/부터|까지|에서|~|등록|넣어|추가|잡아|해\s*줘|해줘|일정|좀|요|을|를|이|가|오늘|내일|모레|에/g,'')
         .replace(/다음\s*주\s*(월|화|수|목|금|토|일)요?일?/g,'')
         .replace(/이번\s*주\s*(월|화|수|목|금|토|일)요?일?/g,'')
@@ -3561,7 +3619,110 @@
       }catch(e){ vbAddBot('등록 실패. 다시 시도해 주세요.'); vbSpeak('등록에 실패했어요.'); }
     }
 
-    // (7) TTS
+    // (7) 일정 검색 — 키워드로 가장 가까운 일정 찾기
+    async function vbSearchEvents(intent){
+      const keyword = (intent.keyword||'').trim();
+      if(!keyword){ vbAddBot('무엇을 찾을지 말씀해 주세요. (예: 병원 언제야)'); vbSpeak('무엇을 찾을지 말씀해 주세요.'); return; }
+      try{
+        const res = await fetch(API+'/events?prefix='+PREFIX);
+        if(!res.ok) throw new Error();
+        const events = await res.json();
+        const today = vbFmt(new Date());
+        // 키워드 포함 + 오늘 이후
+        const matched = events
+          .filter(e => e.text && e.text.includes(keyword))
+          .sort((a,b)=> (a.startDate||'').localeCompare(b.startDate||''));
+        if(matched.length === 0){
+          vbAddBot(`"${keyword}" 일정을 찾지 못했어요.`);
+          vbSpeak(`${keyword} 일정을 찾지 못했어요.`);
+          return;
+        }
+        // 오늘 이후 일정 우선
+        const upcoming = matched.filter(e => (e.endDate||e.startDate) >= today);
+        const target = upcoming.length ? upcoming[0] : matched[matched.length-1]; // 없으면 가장 최근 과거
+        const dateLabel = vbWhenLabel(target.startDate);
+        const isPast = (target.endDate||target.startDate) < today;
+        const tense = isPast ? '있었어요' : '있어요';
+        let msg = `📌 "${keyword}" 일정은 ${dateLabel}에 ${tense}.`;
+        if(target.from) msg += ` (${target.from}${target.to?'~'+target.to:''})`;
+        if(target.user) msg += ` — ${target.user}님 등록`;
+        // 추가 일정 있으면 개수 안내
+        if(matched.length > 1){
+          msg += `\n(총 ${matched.length}개 중 가장 가까운 1개)`;
+        }
+        vbAddBot(msg);
+        vbSpeak(`${keyword} 일정은 ${dateLabel}에 ${tense}.`);
+      }catch(e){
+        vbAddBot('검색에 실패했어요.'); vbSpeak('검색에 실패했어요.');
+      }
+    }
+
+    // (8) 일정 삭제 — 키워드 + 날짜로 후보 찾고 확인
+    async function vbDeleteEvent(intent){
+      const keyword = (intent.keyword||'').replace(/삭제|지워|취소|줘/g,'').trim();
+      const {startDate, endDate} = intent.dates || {};
+      try{
+        const res = await fetch(API+'/events?prefix='+PREFIX);
+        if(!res.ok) throw new Error();
+        const events = await res.json();
+        // 후보 필터
+        let candidates = events;
+        if(startDate){
+          const s = startDate, e = endDate || startDate;
+          candidates = candidates.filter(ev => ev.startDate <= e && (ev.endDate||ev.startDate) >= s);
+        }
+        if(keyword){
+          candidates = candidates.filter(ev => ev.text && ev.text.includes(keyword));
+        }
+        if(candidates.length === 0){
+          vbAddBot('삭제할 일정을 찾지 못했어요. 더 정확하게 말씀해 주세요. (예: 오늘 병원 삭제)');
+          vbSpeak('삭제할 일정을 찾지 못했어요.');
+          return;
+        }
+        if(candidates.length === 1){
+          // 바로 확인 질문
+          const ev = candidates[0];
+          vbPendingIntent = {action:'_doDelete', event: ev};
+          const dateLabel = vbWhenLabel(ev.startDate);
+          const q = `${dateLabel} "${ev.text}" 일정을 삭제할까요? (예/아니오)`;
+          vbAddBot(q); vbSpeak(q);
+          return;
+        }
+        // 여러 건 — 번호로 선택
+        let msg = '여러 일정이 있어요. 어떤 걸 삭제할까요?\n';
+        const sp = ['여러 일정이 있어요. 번호로 말씀해 주세요.'];
+        candidates.slice(0,5).forEach((ev,i)=>{
+          const dl = vbWhenLabel(ev.startDate);
+          msg += `${i+1}. ${dl} "${ev.text}" (${ev.user})\n`;
+          sp.push(`${i+1}번, ${ev.text}.`);
+        });
+        msg += '\n예: "1번 삭제해줘"';
+        vbPendingIntent = {action:'_chooseDelete', candidates: candidates.slice(0,5)};
+        vbAddBot(msg); vbSpeak(sp.join(' '));
+      }catch(e){
+        vbAddBot('삭제 처리 중 오류가 발생했어요.'); vbSpeak('오류가 발생했어요.');
+      }
+    }
+
+    // 실제 삭제 수행
+    async function vbExecuteDelete(ev){
+      try{
+        const res = await fetch(`${API}/events?prefix=${PREFIX}&id=${ev.id}`, {method:'DELETE'});
+        if(res.ok){
+          // 캐시 업데이트
+          const idx = cache.events.findIndex(e=>e.id===ev.id);
+          if(idx>=0) cache.events.splice(idx,1);
+          renderCalendar(); renderEvents();
+          const dateLabel = vbWhenLabel(ev.startDate);
+          vbAddBot(`🗑️ ${dateLabel} "${ev.text}" 일정을 삭제했어요.`);
+          vbSpeak(`${dateLabel} ${ev.text} 일정을 삭제했어요.`);
+        } else throw new Error();
+      }catch(e){
+        vbAddBot('삭제에 실패했어요.'); vbSpeak('삭제에 실패했어요.');
+      }
+    }
+
+    // (9) TTS
     function vbSpeak(text){
       if(!window.speechSynthesis) return;
       speechSynthesis.cancel();
