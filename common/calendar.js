@@ -3177,7 +3177,6 @@
         vbSpeak('다시 한번 말씀해 주세요.');
       }
     }
-    }
 
     // (3) 의도 파악 (규칙 기반)
     async function vbHandleCommand(text){
