@@ -3052,6 +3052,7 @@
         안녕하세요! 마이크를 누르고 말해 주세요.<br>
         • "오늘 일정 알려줘"<br>
         • "내일 병원 등록해줘"<br>
+        • "6월 20일 오후 3시부터 5시까지 회의 등록해줘"<br>
         • "6월 20일부터 3일간 여행 등록해줘"<br>
         • "7월 1일부터 2주간 출장 넣어줘"
       </div>
@@ -3323,7 +3324,7 @@
 
       // 등록 명령
       if(hasAddVerb){
-        return {action:'add', dates: vbParseDateRange(text), eventText: vbExtractText(text)};
+        return {action:'add', dates: vbParseDateRange(text), times: vbParseTimeRange(text), eventText: vbExtractText(text)};
       }
       // 삭제
       if(/삭제|지워|취소/.test(text)) return {action:'delete'};
@@ -3338,7 +3339,7 @@
       // 날짜+내용이면 등록으로 간주
       const dates = vbParseDateRange(text);
       const et = vbExtractText(text);
-      if(dates.startDate && et) return {action:'add', dates, eventText: et};
+      if(dates.startDate && et) return {action:'add', dates, times: vbParseTimeRange(text), eventText: et};
       // 시점만 있어도 조회 추정
       if(hasWhen) return {action:'query', when: vbParseWhen(text), short: true};
 
@@ -3417,10 +3418,49 @@
       return null;
     }
 
+    // 시간 파싱 — "오후 3시부터 5시까지", "9시 30분부터 10시까지", "15시부터 17시까지"
+    function vbParseTimeRange(text){
+      // 한자어/숫자 시간 정규식 — "오후 3시 30분", "15시", "9시반"
+      // (오전|오후)? + 숫자(시) + (숫자분|반)? 형태
+      const TIME_RE = /(?:(오전|오후|아침|저녁|밤|낮))?\s*(\d{1,2})\s*시\s*(반|(\d{1,2})\s*분)?/g;
+      const matches = [];
+      let m;
+      // 정규식 상태 리셋
+      TIME_RE.lastIndex = 0;
+      while((m = TIME_RE.exec(text)) !== null){
+        const period = m[1]; // 오전/오후
+        let hour = parseInt(m[2]);
+        let min = 0;
+        if(m[3] === '반') min = 30;
+        else if(m[4]) min = parseInt(m[4]);
+        // 오후/저녁/밤 보정 (12시간제 → 24시간제)
+        if(period && /오후|저녁|밤/.test(period) && hour < 12) hour += 12;
+        if(period && /오전|아침/.test(period) && hour === 12) hour = 0;
+        if(hour > 23 || min > 59) continue;
+        matches.push({hour, min});
+      }
+      if(matches.length === 0) return {from:'', to:''};
+      if(matches.length === 1){
+        // 단일 시간 — from만 설정
+        const a = matches[0];
+        return {from: `${a.hour}:${vbPad(a.min)}`, to:''};
+      }
+      // 2개 이상이면 첫 번째=시작, 두 번째=종료
+      const a = matches[0], b = matches[1];
+      // 종료가 시작보다 작고 period가 없으면 오후로 추정 (예: 9시부터 5시 → 9~17시는 안됨, 그러나 한국어 화법상 처리)
+      let toHour = b.hour;
+      if(toHour < a.hour && toHour < 12) toHour += 12;
+      return {
+        from: `${a.hour}:${vbPad(a.min)}`,
+        to:   `${toHour}:${vbPad(b.min)}`
+      };
+    }
+
     function vbExtractText(text){
       return text
         .replace(/\d{1,2}월\s*\d{1,2}일/g,'')
         .replace(/\d{1,2}\s*(?:일간|일\s*동안|주간|주\s*동안|달간|개월간|개월\s*동안|달\s*동안)/g,'')
+        .replace(/(?:오전|오후|아침|저녁|밤|낮)?\s*\d{1,2}\s*시\s*(?:반|\d{1,2}\s*분)?/g,'')
         .replace(/부터|까지|에서|~|등록|넣어|추가|잡아|해\s*줘|해줘|일정|좀|요|을|를|이|가|오늘|내일|모레|에/g,'')
         .replace(/다음\s*주\s*(월|화|수|목|금|토|일)요?일?/g,'')
         .replace(/이번\s*주\s*(월|화|수|목|금|토|일)요?일?/g,'')
@@ -3494,10 +3534,12 @@
     // (6) 일정 등록
     async function vbAddEvent(intent){
       const {startDate,endDate} = intent.dates||{};
+      const {from,to} = intent.times || {from:'', to:''};
       const eventText = intent.eventText;
       if(!startDate){ vbAddBot('날짜를 알아듣지 못했어요.'); vbSpeak('날짜를 알아듣지 못했어요.'); return; }
       if(!eventText){ vbAddBot('어떤 일정인지 알아듣지 못했어요.'); vbSpeak('어떤 일정인지 알아듣지 못했어요.'); return; }
       const dateLabel = startDate===endDate ? startDate : `${startDate} ~ ${endDate}`;
+      const timeLabel = from ? (to ? ` (${from} ~ ${to})` : ` (${from} 부터)`) : '';
       try{
         const ev = {
           id: Date.now().toString(36)+Math.random().toString(36).slice(2,7),
@@ -3505,7 +3547,7 @@
           color: currentUserColor||'#4a90d9',
           text: eventText,
           startDate, endDate: endDate||startDate,
-          from:'', to:'', important:false
+          from, to, important:false
         };
         const res = await fetch(API+'/events?prefix='+PREFIX, {
           method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(ev)
@@ -3513,8 +3555,8 @@
         if(res.ok){
           cache.events.push(ev);
           renderCalendar(); renderEvents();
-          const msg = `✅ ${dateLabel}에 "${eventText}" 등록했어요!`;
-          vbAddBot(msg); vbSpeak(`${dateLabel}에 ${eventText} 등록했어요.`);
+          const msg = `✅ ${dateLabel}${timeLabel}에 "${eventText}" 등록했어요!`;
+          vbAddBot(msg); vbSpeak(`${dateLabel}${timeLabel}에 ${eventText} 등록했어요.`);
         } else throw new Error();
       }catch(e){ vbAddBot('등록 실패. 다시 시도해 주세요.'); vbSpeak('등록에 실패했어요.'); }
     }
