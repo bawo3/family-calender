@@ -308,7 +308,7 @@
     <button class="nav-btn" id="nextBtn">▶</button>
     <button class="nav-btn" id="todayBtn">오늘</button>
     <button class="nav-btn view-toggle-btn" id="viewToggleBtn" title="월별/주별 보기 전환">📅 월</button>
-    <button class="nav-btn compact-toggle-btn" id="compactToggleBtn" title="텍스트/점 표시 전환 (월별 보기에서만 동작)">📍 점</button>
+    <button class="nav-btn compact-toggle-btn" id="compactToggleBtn" title="텍스트/점 표시 전환 (월별 보기에서만 동작)">� 텍스트</button>
   </div>
   <div class="cal-grid-wrap" id="calGridWrap">
     <div class="weekdays">
@@ -502,9 +502,9 @@
   // 보기 모드 — 'month'(달력 그리드) / 'week'(현재 주 세로 리스트, 모바일 가독성용)
   let viewMode='month';
   let weekAnchor=new Date(); // 주별 보기 기준일 (이 날짜가 포함된 주를 표시)
-  // 컴팩트(점) 모드 — true면 텍스트 바 대신 사용자 색 점 표시 (월별 보기 전용)
-  // 기본값은 점 모드 — 한눈에 어느 날 일정 있는지 확인용
-  let compactMode=true;
+  // 컴팩트(점) 모드 — false면 텍스트 바 표시 (삼성 캘린더 스타일)
+  // 기본값은 텍스트 모드 — 일정 내용을 한눈에 확인
+  let compactMode=false;
   let editingEventId=null; // 수정 중인 일정 ID (null=추가 모드)
   let _pastEventsCollapsed=true; // 이번달 지난 일정 접힘 상태
   let _monthEventsCollapsed=true; // 이번달 진행 예정 일정 접힘 상태
@@ -2203,16 +2203,18 @@
           if(isMulti){
             bar.style.background=evColor+'18'; // 10% 투명도 hex
           }
-          // tooltip은 항상 — '이름: 내용'
+          // tooltip은 항상 — '이름: 내용' (전체 텍스트)
+          bar.title=ev.isAnniversary?ev.text:`${ev.user||''}: ${ev.text}`;
+          // 셀 내 표시 — 6자 단위로 줄바꿈, 최대 2줄(12자+…)
           if(barClass==='bar-single'||barClass==='bar-start'||barClass==='bar-span'){
+            let displayText=ev.text;
+            if(displayText.length>12) displayText=displayText.slice(0,12)+'…';
             if(ev.isAnniversary){
-              bar.textContent=ev.text;
+              bar.textContent=displayText;
             } else {
-              // 셀 내 텍스트만 표시 (시간 제외), ⭐는 유지
-              bar.innerHTML=`${ev.important?'<span class="bar-star">⭐</span>':''}${ev.text}`;
+              bar.innerHTML=`${ev.important?'<span class="bar-star">⭐</span>':''}${displayText}`;
             }
-          }
-          bar.title=ev.isAnniversary?ev.text:`${ev.user||''}: ${ev.text}`;          cell.appendChild(bar);
+          }          cell.appendChild(bar);
         });
         if(deduped.length>4){
           const more=document.createElement('div');more.className='event-bar bar-single bar-more';

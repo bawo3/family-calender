@@ -163,8 +163,8 @@ body.dark .event-bar.bar-span{background:rgba(255,255,255,0.07);}
 .event-bar.bar-start .bar-time{display:inline-block;}
 /* 다일 중간/끝 — 텍스트 숨기고 띠만 보여줌 */
 .event-bar.bar-mid,.event-bar.bar-end{font-size:0;color:transparent;}
-/* 단일일 이벤트 — 2줄까지 줄바꿈 (갤럭시 캘린더 스타일) */
-.event-bar.bar-single{white-space:normal;line-height:1.3;height:auto;min-height:18px;max-height:36px;padding:1px 4px 1px 7px;overflow:hidden;text-overflow:ellipsis;border-left:3px solid;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;}
+/* 단일일 이벤트 — 6자에서 줄바꿈, 최대 2줄 (갤럭시 캘린더 스타일) */
+.event-bar.bar-single{white-space:normal;word-break:break-all;line-height:1.3;height:auto;min-height:18px;max-height:36px;padding:1px 4px 1px 7px;overflow:hidden;text-overflow:ellipsis;border-left:3px solid;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
 .event-bar .bar-star{margin-right:1px;font-size:10px;}
 .event-bar .bar-time{font-size:9px;opacity:0.6;margin-left:2px;white-space:nowrap;}
 .event-bar.bar-more{opacity:0.7;font-style:italic;border-left:3px solid #95a5a6;}

@@ -67,8 +67,7 @@ async function startListening() {
     isListening = true;
     webSpeechResult = '';
     micBtn.classList.add('listening');
-    micBtn.querySelector('.mic-label').textContent = '듣는 중...';
-    statusText.textContent = '말씀하신 후 버튼을 다시 눌러주세요';
+    statusText.textContent = '듣고 있어요... 버튼을 다시 누르면 종료';
 
     // (b) Web Speech API 실시간 인식을 동시에 시작 (폴백용)
     startWebSpeechParallel();
@@ -105,7 +104,6 @@ async function startListening() {
 function stopListening() {
   isListening = false;
   micBtn.classList.remove('listening');
-  micBtn.querySelector('.mic-label').textContent = '음성';
   statusText.textContent = '인식 중...';
   if (mediaRecorder && mediaRecorder.state === 'recording') {
     mediaRecorder.stop();
