@@ -125,30 +125,30 @@ body.dark .b-item.in-progress{background:rgba(46,204,113,0.15);}
 .cal-grid-wrap.text-mode .weekdays,
 .cal-grid-wrap.text-mode .days:not(.week-view){min-width:0;}
 .days.text-mode-rows{display:flex;flex-direction:column;gap:4px;}
-.week-row{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+.week-row{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;}
 
 /* 다일 이벤트 오버레이 레이어 (셀 위에 겹쳐서 표시) */
 .week-ev-layer{
   grid-column:1/-1;
   display:grid;
   grid-template-columns:repeat(7,1fr);
-  gap:4px;
+  gap:2px;
   pointer-events:none;
-  padding:0 0 2px 0;
+  padding:0 0 1px 0;
 }
 /* 오버레이 이벤트 바 — 셀 경계를 무시하고 연속으로 뻗음 */
 .week-ev-bar{
-  color:#fff;font-size:11px;line-height:1.3;
-  padding:2px 5px;border-radius:3px;
+  color:#fff;font-size:10px;line-height:1.2;
+  padding:0px 3px;border-radius:2px;
   overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
   margin-top:1px;pointer-events:auto;cursor:pointer;
-  min-height:18px;
+  min-height:14px;
 }
 .week-ev-bar .bar-star{margin-right:2px;font-size:10px;}.weekdays{display:grid;grid-template-columns:repeat(7,1fr);background:var(--weekday-bg);border-radius:6px;overflow:hidden;}
 .weekdays div{padding:10px;text-align:center;font-weight:bold;font-size:14px;color:var(--text-primary);}
 .weekdays .sun{color:#e74c3c;} .weekdays .sat{color:#3498db;}
-.days{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:4px;}
-.day{min-height:100px;background:var(--day-bg);border-radius:6px;padding:6px;cursor:pointer;transition:background 0.15s;border:1px solid transparent;overflow:visible;}
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-top:2px;}
+.day{min-height:80px;background:var(--day-bg);border-radius:4px;padding:2px;cursor:pointer;transition:background 0.15s;border:1px solid transparent;overflow:visible;}
 /* 그리드 컨테이너에서 캘린더 경계 밖으로 글자가 흘러나가지 않도록 클립 */
 .days{overflow:hidden;}
 .day:hover{background:var(--day-hover);}
@@ -157,17 +157,17 @@ body.dark .b-item.in-progress{background:rgba(46,204,113,0.15);}
 .day.selected{background:var(--day-hover);border-color:var(--accent-dark);}
 .day.range{background:rgba(243,156,18,0.12);border-color:rgba(243,156,18,0.4);}
 .day.range-edge{background:rgba(243,156,18,0.28);border-color:#e67e22;}
-.day .date-num{font-size:14px;font-weight:bold;margin-bottom:4px;color:var(--text-primary);}
+.day .date-num{font-size:11px;font-weight:bold;margin-bottom:1px;line-height:1.2;color:var(--text-primary);}
 .day.sun .date-num{color:#e74c3c;} .day.sat .date-num{color:#3498db;}
 /* 법정공휴일 — 빨간 글씨 + 공휴일명 라벨 */
 .day.holiday .date-num{color:#e74c3c;}
-.day .holiday-name{font-size:9px;color:#e74c3c;line-height:1.15;margin:-2px 0 3px 0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.day .holiday-name{font-size:8px;color:#e74c3c;line-height:1.1;margin:0 0 1px 0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 @media(max-width:480px){
   .day .holiday-name{font-size:8px;}
 }
 
 /* 이벤트 바 (삼성 캘린더 스타일 — 불투명 배경색 + 흰 글씨) */
-.event-bar{color:#fff;font-size:11px;line-height:1.3;height:auto;min-height:16px;max-height:32px;margin-top:1px;padding:1px 4px;border-radius:3px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-all;white-space:normal;}
+.event-bar{color:#fff;font-size:10px;line-height:1.2;height:auto;min-height:14px;max-height:28px;margin-top:1px;padding:0px 2px;border-radius:2px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-all;white-space:normal;}
 /* 다일 이벤트 바 — 셀 사이 gap을 메워 연속 블록 */
 .event-bar.bar-start{border-radius:3px 0 0 3px;margin-right:-8px;}
 .event-bar.bar-mid{border-radius:0;margin-left:-8px;margin-right:-8px;min-height:16px;max-height:16px;-webkit-line-clamp:1;}
