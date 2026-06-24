@@ -29,8 +29,8 @@ body.dark {
   --today-bg:rgba(255,235,100,0.12);
 }
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;background:var(--body-bg);color:var(--text-base);padding:20px;user-select:none;transition:background 0.3s,color 0.3s;}
-.container{max-width:900px;margin:0 auto;background:var(--card-bg);border-radius:12px;box-shadow:var(--card-shadow);padding:24px;transition:background 0.3s;}
+body{font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;background:var(--body-bg);color:var(--text-base);padding:10px 4px;user-select:none;transition:background 0.3s,color 0.3s;}
+.container{max-width:900px;margin:0 auto;background:var(--card-bg);border-radius:12px;box-shadow:var(--card-shadow);padding:24px 6px;transition:background 0.3s;}
 
 /* 로그인 */
 .login-box{max-width:480px;margin:20px auto;background:var(--card-bg);border-radius:12px;box-shadow:var(--card-shadow);padding:32px;transition:background 0.3s;}
@@ -76,8 +76,8 @@ body{font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;background:var
 .nav-btn:hover{background:var(--accent-dark);}
 .month-label{font-size:16px;font-weight:bold;flex:1;text-align:center;color:var(--text-primary);}
 @media(max-width:480px){
-  body{padding:10px;}
-  .container{padding:14px;}
+  body{padding:4px 2px;}
+  .container{padding:10px 4px;}
   /* 모바일 일정 입력 폼 — 시작/종료 옆 중요체크, 일정입력 옆 추가버튼 */
   .event-form select.hour-select{min-width:54px;padding:6px 4px;font-size:12px;}
   .event-form .time-label{font-size:11px;}
@@ -148,7 +148,14 @@ body.dark .b-item.in-progress{background:rgba(46,204,113,0.15);}
 .weekdays div{padding:4px 2px;text-align:center;font-weight:bold;font-size:11px;color:var(--text-primary);}
 .weekdays .sun{color:#e74c3c;} .weekdays .sat{color:#3498db;}
 .days{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;margin-top:1px;}
-.day{min-height:65px;background:var(--day-bg);border-radius:2px;padding:1px 2px;cursor:pointer;transition:background 0.15s;border:1px solid transparent;overflow:hidden;}
+/* 날짜 번호 행 (주단위 일정 위) */
+.day-num-cell{text-align:center;padding:2px 0 0;font-size:10px;font-weight:bold;color:var(--text-primary);cursor:pointer;line-height:1.2;}
+.day-num-cell.empty{visibility:hidden;}
+.day-num-cell.sun,.day-num-cell.holiday{color:#e74c3c;}
+.day-num-cell.sat{color:#3498db;}
+.day-num-cell.today .date-num{background:var(--accent);color:#fff;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;}
+.day-num-cell .holiday-name{font-size:7px;color:#e74c3c;line-height:1;display:block;}
+.day{min-height:48px;background:var(--day-bg);border-radius:2px;padding:1px 1px;cursor:pointer;transition:background 0.15s;border:1px solid transparent;overflow:hidden;}
 /* 그리드 컨테이너에서 캘린더 경계 밖으로 글자가 흘러나가지 않도록 클립 */
 .days{overflow:hidden;}
 .day:hover{background:var(--day-hover);}

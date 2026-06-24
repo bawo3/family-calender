@@ -2116,9 +2116,34 @@
           bar.innerHTML=`${ev.important?'<span class="bar-star">⭐</span>':''}${ev.text}`;
           evLayer.appendChild(bar);
         });
-        // 오버레이는 나중에 날짜 셀 뒤에 삽입
+        // evLayer는 날짜 행과 이벤트 행 사이에 삽입
 
-        // --- (2) 7개 날짜 셀 ---
+        // --- (2) 날짜 번호 행 (7개 셀) ---
+        for(let col=0;col<7;col++){
+          const pos=row*7+col;
+          const day=pos-firstDay+1;
+          if(pos<firstDay||day>lastDate){
+            const e=document.createElement('div');e.className='day-num-cell empty';weekRow.appendChild(e);continue;
+          }
+          const dateStr=formatDate(year,month,day);
+          const numCell=document.createElement('div');numCell.className='day-num-cell';
+          const wd=col;
+          if(wd===0)numCell.classList.add('sun');if(wd===6)numCell.classList.add('sat');
+          const holidayName=getHoliday(dateStr);
+          if(holidayName)numCell.classList.add('holiday');
+          if(dateStr===today)numCell.classList.add('today');
+          const num=document.createElement('span');num.className='date-num';num.textContent=day;numCell.appendChild(num);
+          if(holidayName){
+            const hl=document.createElement('span');hl.className='holiday-name';hl.textContent=holidayName;numCell.appendChild(hl);
+          }
+          numCell.addEventListener('click',()=>{ if(!editingEventId) handleDayClick(dateStr); });
+          weekRow.appendChild(numCell);
+        }
+
+        // --- (3) 주단위 다일 이벤트 오버레이 (날짜와 단일일정 사이) ---
+        weekRow.appendChild(evLayer);
+
+        // --- (4) 단일일 이벤트 셀 (7개) ---
         for(let col=0;col<7;col++){
           const pos=row*7+col;
           const day=pos-firstDay+1;
@@ -2139,10 +2164,6 @@
             if(selectedStart===selectedEnd&&dateStr===selectedStart)cell.classList.add('selected');
             else if(dateStr===lo||dateStr===hi)cell.classList.add('range-edge');
             else if(dateStr>lo&&dateStr<hi)cell.classList.add('range');
-          }
-          const num=document.createElement('div');num.className='date-num';num.textContent=day;cell.appendChild(num);
-          if(holidayName){
-            const hl=document.createElement('div');hl.className='holiday-name';hl.textContent=holidayName;cell.appendChild(hl);
           }
           // 단일일 이벤트만 셀 내부에 표시
           const annivDay=annivAll.filter(ev=>ev.startDate===dateStr);
@@ -2175,8 +2196,6 @@
           });
           weekRow.appendChild(cell);
         }
-        // 다일 이벤트 오버레이를 날짜 셀 아래에 배치
-        weekRow.appendChild(evLayer);
         grid.appendChild(weekRow);
       }
       renderImportantBanner();
