@@ -2116,7 +2116,7 @@
           bar.innerHTML=`${ev.important?'<span class="bar-star">⭐</span>':''}${ev.text}`;
           evLayer.appendChild(bar);
         });
-        weekRow.appendChild(evLayer);
+        // 오버레이는 나중에 날짜 셀 뒤에 삽입
 
         // --- (2) 7개 날짜 셀 ---
         for(let col=0;col<7;col++){
@@ -2175,6 +2175,8 @@
           });
           weekRow.appendChild(cell);
         }
+        // 다일 이벤트 오버레이를 날짜 셀 아래에 배치
+        weekRow.appendChild(evLayer);
         grid.appendChild(weekRow);
       }
       renderImportantBanner();
