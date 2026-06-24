@@ -155,6 +155,9 @@ body.dark .b-item.in-progress{background:rgba(46,204,113,0.15);}
 .day-num-cell.sat{color:#3498db;}
 .day-num-cell.today .date-num{background:var(--accent);color:#fff;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;}
 .day-num-cell .holiday-name{font-size:7px;color:#e74c3c;line-height:1;display:block;}
+.day-num-cell.selected{background:var(--day-hover);}
+.day-num-cell.range{background:rgba(243,156,18,0.12);}
+.day-num-cell.range-edge{background:rgba(243,156,18,0.28);}
 .day{min-height:48px;background:var(--day-bg);border-radius:2px;padding:0;cursor:pointer;transition:background 0.15s;border:1px solid transparent;overflow:hidden;}
 /* 그리드 컨테이너에서 캘린더 경계 밖으로 글자가 흘러나가지 않도록 클립 */
 .days{overflow:hidden;}

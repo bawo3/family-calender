@@ -2132,6 +2132,14 @@
           const holidayName=getHoliday(dateStr);
           if(holidayName)numCell.classList.add('holiday');
           if(dateStr===today)numCell.classList.add('today');
+          if(multiSelectMode){
+            if(multiSelectDates.has(dateStr))numCell.classList.add('selected');
+          } else if(selectedStart&&selectedEnd){
+            const lo=minDate(selectedStart,selectedEnd),hi=maxDate(selectedStart,selectedEnd);
+            if(selectedStart===selectedEnd&&dateStr===selectedStart)numCell.classList.add('selected');
+            else if(dateStr===lo||dateStr===hi)numCell.classList.add('range-edge');
+            else if(dateStr>lo&&dateStr<hi)numCell.classList.add('range');
+          }
           const num=document.createElement('span');num.className='date-num';num.textContent=day;numCell.appendChild(num);
           if(holidayName){
             const hl=document.createElement('span');hl.className='holiday-name';hl.textContent=holidayName;numCell.appendChild(hl);
