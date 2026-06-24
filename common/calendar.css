@@ -146,25 +146,18 @@ body.dark .b-item.in-progress{background:rgba(46,204,113,0.15);}
   .day .holiday-name{font-size:8px;}
 }
 
-/* 이벤트 바 (삼성 캘린더 스타일 — 왼쪽 컬러 바 + 간결한 텍스트) */
-.event-bar{color:var(--text-primary);font-size:11px;height:auto;line-height:1.3;margin-top:2px;padding:1px 4px 1px 7px;border-radius:3px;white-space:normal;word-break:break-all;overflow:hidden;background:transparent;border-left:3px solid #95a5a6;position:relative;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;max-height:32px;}
-/* 다일 이벤트 바 — 셀 사이 gap을 메워 연속된 띠로 표시 */
-.event-bar.bar-start{border-radius:3px 0 0 3px;margin-right:-8px;padding-right:4px;border-left:3px solid;background:rgba(0,0,0,0.04);}
-.event-bar.bar-mid{border-radius:0;margin-left:-8px;margin-right:-8px;padding-left:6px;border-left:none;background:rgba(0,0,0,0.04);}
-.event-bar.bar-end{border-radius:0 3px 3px 0;margin-left:-8px;padding-left:6px;border-left:none;background:rgba(0,0,0,0.04);}
-.event-bar.bar-span{border-radius:3px;margin-left:-4px;margin-right:-4px;padding:0 6px 0 7px;border-left:3px solid;background:rgba(0,0,0,0.04);}
-/* 다크 모드에서 다일 배경색 보정 */
-body.dark .event-bar.bar-start,
-body.dark .event-bar.bar-mid,
-body.dark .event-bar.bar-end,
-body.dark .event-bar.bar-span{background:rgba(255,255,255,0.07);}
-/* 다일 중간/끝 — 텍스트도 6자씩 이어서 표시 */
-.event-bar.bar-mid,.event-bar.bar-end{-webkit-line-clamp:1;max-height:18px;}
+/* 이벤트 바 (삼성 캘린더 스타일 — 불투명 배경색 + 흰 글씨) */
+.event-bar{color:#fff;font-size:11px;line-height:1.3;height:auto;min-height:16px;max-height:32px;margin-top:1px;padding:1px 4px;border-radius:3px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-all;white-space:normal;}
+/* 다일 이벤트 바 — 셀 사이 gap을 메워 연속 블록 */
+.event-bar.bar-start{border-radius:3px 0 0 3px;margin-right:-8px;}
+.event-bar.bar-mid{border-radius:0;margin-left:-8px;margin-right:-8px;min-height:16px;max-height:16px;-webkit-line-clamp:1;}
+.event-bar.bar-end{border-radius:0 3px 3px 0;margin-left:-8px;min-height:16px;max-height:16px;-webkit-line-clamp:1;}
+.event-bar.bar-span{border-radius:3px;}
+/* 다크 모드 보정 불필요 (불투명 배경이므로) */
 /* 단일일 이벤트 */
-.event-bar.bar-single{border-left:3px solid;}
+.event-bar.bar-single{border-radius:3px;}
 .event-bar .bar-star{margin-right:1px;font-size:10px;}
-.event-bar .bar-time{font-size:9px;opacity:0.6;margin-left:2px;white-space:nowrap;}
-.event-bar.bar-more{opacity:0.7;font-style:italic;border-left:3px solid #95a5a6;-webkit-line-clamp:1;max-height:18px;}
+.event-bar.bar-more{opacity:0.7;font-style:italic;min-height:14px;max-height:14px;-webkit-line-clamp:1;font-size:10px;}
 /* 점(dot) 모드 — 작은 컬러 점, 중요 이벤트는 ⭐ */
 .day-dots{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;align-items:center;}
 .day-dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0;box-shadow:0 0 0 1px rgba(0,0,0,0.06) inset;}

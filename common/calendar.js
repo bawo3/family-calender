@@ -2194,37 +2194,17 @@
           }
           const bar=document.createElement('div');
           bar.className=`event-bar ${barClass}${ev.isAnniversary?' anniv-bar':''}`;
-          // 삼성 스타일 — 컬러 바 + 다일은 연한 배경으로 셀 이어짐
+          // 삼성 스타일 — 불투명 배경색(사용자 색) + 흰 글씨
           const evColor=ev.color||'#95a5a6';
-          if(barClass==='bar-single'||barClass==='bar-start'||barClass==='bar-span'){
-            bar.style.borderLeftColor=evColor;
-          }
-          // 다일 이벤트 — 연한 배경색을 해당 이벤트 색상 기반으로 입힘
-          if(isMulti){
-            bar.style.background=evColor+'18'; // 10% 투명도 hex
-          }
-          // tooltip은 항상 — '이름: 내용' (전체 텍스트)
+          bar.style.background=evColor;
+          // tooltip — 전체 텍스트 (hover 시 확인)
           bar.title=ev.isAnniversary?ev.text:`${ev.user||''}: ${ev.text}`;
-          // 셀 내 표시 — 셀당 6자씩 분배
-          if(isMulti){
-            // 다일: 이 주에서의 셀 순서를 계산하여 6자씩 잘라 표시
-            const sundayDate=new Date(year,month,day-wd);
-            const evStart=new Date(ev.startDate);
-            const effectiveStart=evStart>sundayDate?evStart:sundayDate;
-            const cellIdx=Math.round((new Date(year,month,day)-effectiveStart)/86400000);
-            const sliceStart=cellIdx*6;
-            const sliceText=ev.text.slice(sliceStart,sliceStart+6);
-            if(sliceText){
-              bar.innerHTML=`${ev.important&&cellIdx===0?'<span class="bar-star">⭐</span>':''}${sliceText}`;
-            }
-          } else {
-            // 단일일: 최대 12자 (6자+줄바꿈+6자)
-            let displayText=ev.text;
-            if(displayText.length>12) displayText=displayText.slice(0,12)+'…';
+          // 시작 셀 또는 단일 셀에만 텍스트 표시 (중간/끝은 색 블록만)
+          if(barClass==='bar-single'||barClass==='bar-start'||barClass==='bar-span'){
             if(ev.isAnniversary){
-              bar.textContent=displayText;
+              bar.textContent=ev.text;
             } else {
-              bar.innerHTML=`${ev.important?'<span class="bar-star">⭐</span>':''}${displayText}`;
+              bar.innerHTML=`${ev.important?'<span class="bar-star">⭐</span>':''}${ev.text}`;
             }
           }          cell.appendChild(bar);
         });
