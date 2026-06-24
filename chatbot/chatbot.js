@@ -160,9 +160,10 @@ function getSupportedMime() {
   return 'audio/webm';
 }
 
-// ===== (2) Groq Whisper STT + 이중 인식 =====
+// ===== (2) Groq Whisper STT + LLM 보정 (한 번에 처리) =====
 async function processAudio(audioBlob) {
   let transcript = '';
+  let corrected = '';
 
   // (a) 오디오 크기가 너무 작으면(0.5초 미만) 무시
   if (audioBlob.size < 5000) {
@@ -173,7 +174,7 @@ async function processAudio(audioBlob) {
   }
 
   try {
-    // (b) Groq Whisper API 호출 (서버 프록시 경유)
+    // (b) Groq Whisper + LLM 보정 API 호출 (서버에서 한 번에 처리)
     const formData = new FormData();
     formData.append('file', audioBlob, 'audio.webm');
     formData.append('language', 'ko');
@@ -186,6 +187,7 @@ async function processAudio(audioBlob) {
     if (res.ok) {
       const data = await res.json();
       transcript = (data.text || '').trim();
+      corrected = (data.corrected || transcript).trim();
     }
   } catch (e) {
     console.warn('Groq STT 실패:', e);
@@ -194,21 +196,23 @@ async function processAudio(audioBlob) {
   // (c) Groq 실패 시 → 병렬로 수집한 Web Speech 결과 사용
   if (!transcript && webSpeechResult) {
     transcript = webSpeechResult.trim();
+    corrected = transcript; // Web Speech 폴백은 보정 없이 원문 사용
     console.log('Web Speech 폴백 사용:', transcript);
   }
 
   // (d) 짧은 대기 후 Web Speech 결과 한번 더 확인 (인식 지연 대비)
   if (!transcript) {
     await new Promise(r => setTimeout(r, 500));
-    if (webSpeechResult) transcript = webSpeechResult.trim();
+    if (webSpeechResult) {
+      transcript = webSpeechResult.trim();
+      corrected = transcript;
+    }
   }
 
   // (e) 인식 결과 처리
   statusText.textContent = '';
   if (transcript) {
-    // (f) LLM 보정: 발음 오류/뭉개짐 교정
-    const corrected = await correctTranscript(transcript);
-    addUserMsg(corrected !== transcript ? `${corrected}` : transcript);
+    addUserMsg(corrected !== transcript ? corrected : transcript);
     if (corrected !== transcript) {
       addBotMsg(`💡 "${transcript}" → "${corrected}" (으)로 이해했어요.`);
     }
@@ -217,24 +221,6 @@ async function processAudio(audioBlob) {
     addBotMsg('죄송해요, 잘 못 알아들었어요. 다시 한번 또박또박 말해주시거나 아래 입력창에 직접 입력해 주세요.');
     speak('잘 못 알아들었어요. 다시 말해주시거나 입력창에 직접 입력해 주세요.');
   }
-}
-
-// ===== (2-1) 음성 인식 결과 보정 (Groq LLM) =====
-async function correctTranscript(text) {
-  try {
-    const res = await fetch(`${API_BASE}/correct`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text })
-    });
-    if (res.ok) {
-      const data = await res.json();
-      return data.corrected || text;
-    }
-  } catch (e) {
-    console.warn('보정 API 실패, 원문 사용:', e);
-  }
-  return text;
 }
 
 // ===== (3) 의도 파악 (규칙 기반 NLU) =====
