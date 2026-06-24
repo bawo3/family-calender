@@ -2205,10 +2205,11 @@
           }
           // tooltip은 항상 — '이름: 내용' (전체 텍스트)
           bar.title=ev.isAnniversary?ev.text:`${ev.user||''}: ${ev.text}`;
-          // 셀 내 표시 — 6자 단위로 줄바꿈, 최대 2줄(12자+…)
+          // 셀 내 표시 — 최대 6자씩 2줄(12자), 초과 시 … 처리
           if(barClass==='bar-single'||barClass==='bar-start'||barClass==='bar-span'){
             let displayText=ev.text;
             if(displayText.length>12) displayText=displayText.slice(0,12)+'…';
+            else if(displayText.length>6) displayText=displayText.slice(0,6)+'\n'+displayText.slice(6);
             if(ev.isAnniversary){
               bar.textContent=displayText;
             } else {
