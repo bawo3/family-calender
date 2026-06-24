@@ -2179,8 +2179,8 @@
           cell.appendChild(more);
         }
       } else {
-        // 텍스트 모드 — 단일일은 2줄 래핑, 다일은 가로 스팬. '이름:' 접두사는 색으로 대체
-        deduped.slice(0,3).forEach(ev=>{
+        // 텍스트 모드 — 삼성 캘린더 스타일 (왼쪽 컬러 바 + 1줄 텍스트)
+        deduped.slice(0,4).forEach(ev=>{
           const isMulti=ev.startDate!==ev.endDate;
           let barClass;
           if(!isMulti){barClass='bar-single';}
@@ -2194,23 +2194,29 @@
           }
           const bar=document.createElement('div');
           bar.className=`event-bar ${barClass}${ev.isAnniversary?' anniv-bar':''}`;
-          bar.style.background=ev.color||'#95a5a6';
-          // tooltip은 항상 — '이름: 내용 (시간)'
-          const ts=formatTimeRange(ev.from,ev.to);
+          // 삼성 스타일 — 컬러 바 + 다일은 연한 배경으로 셀 이어짐
+          const evColor=ev.color||'#95a5a6';
+          if(barClass==='bar-single'||barClass==='bar-start'||barClass==='bar-span'){
+            bar.style.borderLeftColor=evColor;
+          }
+          // 다일 이벤트 — 연한 배경색을 해당 이벤트 색상 기반으로 입힘
+          if(isMulti){
+            bar.style.background=evColor+'18'; // 10% 투명도 hex
+          }
+          // tooltip은 항상 — '이름: 내용'
           if(barClass==='bar-single'||barClass==='bar-start'||barClass==='bar-span'){
             if(ev.isAnniversary){
               bar.textContent=ev.text;
             } else {
-              // 가독성 향상 — 이름 접두사 제거(색으로 구분), ⭐는 유지
-              bar.innerHTML=`${ev.important?'<span class="bar-star">⭐</span>':''}${ev.text}${ts?` <span class="bar-time">${ts}</span>`:''}`;
+              // 셀 내 텍스트만 표시 (시간 제외), ⭐는 유지
+              bar.innerHTML=`${ev.important?'<span class="bar-star">⭐</span>':''}${ev.text}`;
             }
           }
-          bar.title=ev.isAnniversary?ev.text:`${ev.user||''}: ${ev.text}${ts?` (${ts})`:''}`;
-          cell.appendChild(bar);
+          bar.title=ev.isAnniversary?ev.text:`${ev.user||''}: ${ev.text}`;          cell.appendChild(bar);
         });
-        if(deduped.length>3){
+        if(deduped.length>4){
           const more=document.createElement('div');more.className='event-bar bar-single bar-more';
-          more.style.background='#95a5a6';more.textContent=`+${deduped.length-3}개 더`;cell.appendChild(more);
+          more.textContent=`+${deduped.length-4}개 더`;cell.appendChild(more);
         }
       }
       cell.addEventListener('click',(e)=>{

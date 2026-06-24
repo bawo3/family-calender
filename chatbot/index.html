@@ -21,7 +21,7 @@
   <!-- 대화 영역 -->
   <div id="chat-area">
     <div class="msg bot">
-      안녕하세요! 🎤 마이크 버튼을 누르고 말씀해 주세요.<br><br>
+      안녕하세요! 🎤 마이크 버튼을 누르거나 아래 입력창에 직접 입력해 주세요.<br><br>
       <strong>이렇게 말해보세요:</strong><br>
       • "오늘 일정 알려줘"<br>
       • "내일 일정 뭐 있어?"<br>
@@ -30,12 +30,16 @@
     </div>
   </div>
 
-  <!-- 마이크 버튼 (항상 하단 고정) -->
+  <!-- 입력 영역 (텍스트 + 마이크) -->
   <div id="mic-area">
-    <button id="mic-btn" aria-label="음성 입력">
-      <span class="mic-icon">🎤</span>
-      <span class="mic-label">누르고 말하세요</span>
-    </button>
+    <div id="text-input-area">
+      <input type="text" id="text-input" placeholder="일정을 입력하세요..." autocomplete="off">
+      <button id="text-send-btn" aria-label="전송">➤</button>
+      <button id="mic-btn" aria-label="음성 입력">
+        <span class="mic-icon">🎤</span>
+        <span class="mic-label">음성</span>
+      </button>
+    </div>
     <div id="status-text"></div>
   </div>
 </div>

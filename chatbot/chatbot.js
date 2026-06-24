@@ -16,6 +16,8 @@ const chatArea = document.getElementById('chat-area');
 const micBtn = document.getElementById('mic-btn');
 const statusText = document.getElementById('status-text');
 const prefixSelect = document.getElementById('prefix-select');
+const textInput = document.getElementById('text-input');
+const textSendBtn = document.getElementById('text-send-btn');
 
 // ===== 초기화 =====
 prefixSelect.addEventListener('change', () => {
@@ -25,10 +27,32 @@ prefixSelect.addEventListener('change', () => {
 
 micBtn.addEventListener('click', startListening);
 
+// (텍스트 입력) 전송 버튼 클릭
+textSendBtn.addEventListener('click', handleTextSubmit);
+
+// (텍스트 입력) Enter 키로 전송
+textInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.isComposing) {
+    e.preventDefault();
+    handleTextSubmit();
+  }
+});
+
+// 텍스트 입력 처리 함수
+async function handleTextSubmit() {
+  const text = textInput.value.trim();
+  if (!text) return;
+  textInput.value = '';
+  addUserMsg(text);
+  await handleCommand(text);
+}
+
 // ===== (1) 음성 녹음 + STT =====
 let mediaRecorder = null;
 let audioChunks = [];
 let isListening = false;
+let webSpeechResult = '';   // Web Speech API 실시간 인식 결과 (병렬 폴백용)
+let webSpeechRecognition = null;
 
 async function startListening() {
   if (isListening) {
@@ -41,11 +65,15 @@ async function startListening() {
     // (a) 마이크 권한 요청
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     isListening = true;
+    webSpeechResult = '';
     micBtn.classList.add('listening');
-    micBtn.querySelector('.mic-label').textContent = '듣고 있어요...';
+    micBtn.querySelector('.mic-label').textContent = '듣는 중...';
     statusText.textContent = '말씀하신 후 버튼을 다시 눌러주세요';
 
-    // (b) 녹음 시작
+    // (b) Web Speech API 실시간 인식을 동시에 시작 (폴백용)
+    startWebSpeechParallel();
+
+    // (c) MediaRecorder 녹음 시작 (Groq 전송용)
     audioChunks = [];
     mediaRecorder = new MediaRecorder(stream, { mimeType: getSupportedMime() });
 
@@ -54,18 +82,19 @@ async function startListening() {
     };
 
     mediaRecorder.onstop = async () => {
-      // (c) 녹음 완료 → STT 호출
+      // (d) 녹음 완료 → STT 호출
       stream.getTracks().forEach(t => t.stop());
+      stopWebSpeechParallel(); // Web Speech도 정리
       const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
       await processAudio(audioBlob);
     };
 
     mediaRecorder.start();
 
-    // (d) 최대 15초 후 자동 중지 (어르신 대비)
+    // (e) 최대 30초 후 자동 중지 (넉넉하게)
     setTimeout(() => {
       if (isListening) stopListening();
-    }, 15000);
+    }, 30000);
 
   } catch (err) {
     addBotMsg('마이크를 사용할 수 없어요. 설정에서 마이크 권한을 허용해 주세요.');
@@ -76,10 +105,49 @@ async function startListening() {
 function stopListening() {
   isListening = false;
   micBtn.classList.remove('listening');
-  micBtn.querySelector('.mic-label').textContent = '누르고 말하세요';
+  micBtn.querySelector('.mic-label').textContent = '음성';
   statusText.textContent = '인식 중...';
   if (mediaRecorder && mediaRecorder.state === 'recording') {
     mediaRecorder.stop();
+  }
+}
+
+// Web Speech API를 녹음과 동시에 병렬 실행 (실시간 폴백)
+function startWebSpeechParallel() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return;
+
+  webSpeechRecognition = new SR();
+  webSpeechRecognition.lang = 'ko-KR';
+  webSpeechRecognition.continuous = true;
+  webSpeechRecognition.interimResults = false;
+
+  webSpeechRecognition.onresult = (e) => {
+    // 인식된 결과를 계속 누적
+    let text = '';
+    for (let i = 0; i < e.results.length; i++) {
+      if (e.results[i].isFinal) {
+        text += e.results[i][0].transcript;
+      }
+    }
+    if (text) webSpeechResult = text;
+  };
+
+  webSpeechRecognition.onerror = () => {}; // 무시 (Groq이 메인)
+  webSpeechRecognition.onend = () => {
+    // 녹음 중인데 종료되면 재시작 (브라우저가 일찍 끊을 수 있음)
+    if (isListening && webSpeechRecognition) {
+      try { webSpeechRecognition.start(); } catch (e) {}
+    }
+  };
+
+  try { webSpeechRecognition.start(); } catch (e) {}
+}
+
+function stopWebSpeechParallel() {
+  if (webSpeechRecognition) {
+    try { webSpeechRecognition.abort(); } catch (e) {}
+    webSpeechRecognition = null;
   }
 }
 
@@ -92,12 +160,20 @@ function getSupportedMime() {
   return 'audio/webm';
 }
 
-// ===== (2) Groq Whisper STT =====
+// ===== (2) Groq Whisper STT + 이중 인식 =====
 async function processAudio(audioBlob) {
   let transcript = '';
 
+  // (a) 오디오 크기가 너무 작으면(0.5초 미만) 무시
+  if (audioBlob.size < 5000) {
+    statusText.textContent = '';
+    addBotMsg('너무 짧아서 알아듣지 못했어요. 조금 더 길게 말해주세요.');
+    speak('조금 더 길게 말해주세요.');
+    return;
+  }
+
   try {
-    // (a) Groq Whisper API 호출 (서버 프록시 경유)
+    // (b) Groq Whisper API 호출 (서버 프록시 경유)
     const formData = new FormData();
     formData.append('file', audioBlob, 'audio.webm');
     formData.append('language', 'ko');
@@ -109,49 +185,56 @@ async function processAudio(audioBlob) {
 
     if (res.ok) {
       const data = await res.json();
-      transcript = data.text || '';
+      transcript = (data.text || '').trim();
     }
   } catch (e) {
-    console.warn('Groq STT 실패, Web Speech 폴백 시도:', e);
+    console.warn('Groq STT 실패:', e);
   }
 
-  // (b) Groq 실패 시 Web Speech API 폴백
+  // (c) Groq 실패 시 → 병렬로 수집한 Web Speech 결과 사용
+  if (!transcript && webSpeechResult) {
+    transcript = webSpeechResult.trim();
+    console.log('Web Speech 폴백 사용:', transcript);
+  }
+
+  // (d) 짧은 대기 후 Web Speech 결과 한번 더 확인 (인식 지연 대비)
   if (!transcript) {
-    transcript = await webSpeechFallback(audioBlob);
+    await new Promise(r => setTimeout(r, 500));
+    if (webSpeechResult) transcript = webSpeechResult.trim();
   }
 
-  // (c) 인식 결과 처리
+  // (e) 인식 결과 처리
   statusText.textContent = '';
   if (transcript) {
-    addUserMsg(transcript);
-    await handleCommand(transcript);
+    // (f) LLM 보정: 발음 오류/뭉개짐 교정
+    const corrected = await correctTranscript(transcript);
+    addUserMsg(corrected !== transcript ? `${corrected}` : transcript);
+    if (corrected !== transcript) {
+      addBotMsg(`💡 "${transcript}" → "${corrected}" (으)로 이해했어요.`);
+    }
+    await handleCommand(corrected);
   } else {
-    addBotMsg('죄송해요, 잘 못 알아들었어요. 다시 한번 말씀해 주세요.');
-    speak('죄송해요, 다시 한번 말씀해 주세요.');
+    addBotMsg('죄송해요, 잘 못 알아들었어요. 다시 한번 또박또박 말해주시거나 아래 입력창에 직접 입력해 주세요.');
+    speak('잘 못 알아들었어요. 다시 말해주시거나 입력창에 직접 입력해 주세요.');
   }
 }
 
-// Web Speech API 폴백 (실시간 인식용)
-function webSpeechFallback() {
-  return new Promise((resolve) => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { resolve(''); return; }
-
-    const recognition = new SR();
-    recognition.lang = 'ko-KR';
-    recognition.continuous = false;
-    recognition.interimResults = false;
-
-    recognition.onresult = (e) => {
-      resolve(e.results[0][0].transcript);
-    };
-    recognition.onerror = () => resolve('');
-    recognition.onend = () => resolve('');
-
-    // 폴백은 다시 마이크 열어야 해서 바로 종료
-    // 이미 오디오가 있으므로 빈 문자열 반환
-    resolve('');
-  });
+// ===== (2-1) 음성 인식 결과 보정 (Groq LLM) =====
+async function correctTranscript(text) {
+  try {
+    const res = await fetch(`${API_BASE}/correct`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.corrected || text;
+    }
+  } catch (e) {
+    console.warn('보정 API 실패, 원문 사용:', e);
+  }
+  return text;
 }
 
 // ===== (3) 의도 파악 (규칙 기반 NLU) =====
