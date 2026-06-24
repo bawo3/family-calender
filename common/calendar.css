@@ -158,8 +158,8 @@ body.dark .event-bar.bar-start,
 body.dark .event-bar.bar-mid,
 body.dark .event-bar.bar-end,
 body.dark .event-bar.bar-span{background:rgba(255,255,255,0.07);}
-/* 다일 중간/끝 — 텍스트 숨기고 띠만 보여줌 */
-.event-bar.bar-mid,.event-bar.bar-end{font-size:0;color:transparent;-webkit-line-clamp:1;max-height:18px;}
+/* 다일 중간/끝 — 텍스트도 6자씩 이어서 표시 */
+.event-bar.bar-mid,.event-bar.bar-end{-webkit-line-clamp:1;max-height:18px;}
 /* 단일일 이벤트 */
 .event-bar.bar-single{border-left:3px solid;}
 .event-bar .bar-star{margin-right:1px;font-size:10px;}
