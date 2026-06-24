@@ -547,26 +547,40 @@ body.dark .vb-choice-btn:hover:not(:disabled){background:var(--accent);color:#ff
   from{opacity:0;transform:translateY(6px);}
   to{opacity:1;transform:translateY(0);}
 }
-.voice-bot-mic-area{
-  padding:16px;display:flex;flex-direction:column;align-items:center;gap:8px;
+.voice-bot-mic-area, .voice-bot-input-area{
+  padding:12px 16px;display:flex;flex-direction:column;align-items:stretch;gap:8px;
   border-top:1px solid var(--border);
 }
+.vb-input-row{
+  display:flex;width:100%;gap:8px;align-items:center;
+}
+.vb-text-input{
+  flex:1;padding:9px 14px;border:1.5px solid var(--border);border-radius:20px;
+  font-size:0.9rem;outline:none;background:var(--day-bg);color:var(--text-primary);
+  transition:border-color 0.2s;
+}
+.vb-text-input:focus{border-color:var(--accent);}
+.vb-send-btn{
+  width:36px;height:36px;border-radius:50%;border:none;flex-shrink:0;
+  background:var(--accent);color:#fff;font-size:1.1rem;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+.vb-send-btn:active{opacity:0.8;}
 .voice-bot-mic-btn{
-  width:80px;height:80px;border-radius:50%;border:none;
-  background:var(--accent);color:#fff;cursor:pointer;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  width:36px;height:36px;border-radius:50%;border:none;flex-shrink:0;
+  background:#e74c3c;color:#fff;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
   transition:transform 0.2s,box-shadow 0.2s;
-  box-shadow:0 4px 15px rgba(74,144,217,0.4);
+  box-shadow:0 3px 10px rgba(231,76,60,0.3);
 }
 .voice-bot-mic-btn:active{transform:scale(0.93);}
 .voice-bot-mic-btn.listening{
-  background:#e74c3c;
-  box-shadow:0 0 0 8px rgba(231,76,60,0.2);
+  background:#c0392b;
+  box-shadow:0 0 0 6px rgba(231,76,60,0.2);
   animation:vbPulse 1.5s infinite;
 }
-.vb-mic-icon{font-size:2rem;}
-.vb-mic-label{font-size:0.65rem;font-weight:600;}
-.vb-status{font-size:0.8rem;color:var(--text-secondary);min-height:1.2em;}
+.vb-mic-icon{font-size:1.1rem;}
+.vb-status{font-size:0.8rem;color:var(--text-secondary);min-height:1.2em;text-align:center;}
 @keyframes vbPulse{
   0%,100%{box-shadow:0 0 0 8px rgba(231,76,60,0.2);}
   50%{box-shadow:0 0 0 16px rgba(231,76,60,0.08);}

@@ -3184,7 +3184,7 @@
     </div>
     <div class="voice-bot-chat" id="voiceBotChat">
       <div class="vb-msg bot">
-        안녕하세요! 마이크를 누르고 말해 주세요.<br>
+        안녕하세요! 마이크를 누르거나 아래에 직접 입력해 주세요.<br>
         • "오늘 일정 알려줘"<br>
         • "내일 병원 등록해줘"<br>
         • "6월 20일 오후 3시부터 5시까지 회의 등록해줘"<br>
@@ -3192,11 +3192,14 @@
         • "7월 1일부터 2주간 출장 넣어줘"
       </div>
     </div>
-    <div class="voice-bot-mic-area">
-      <button id="voiceBotMic" class="voice-bot-mic-btn" aria-label="음성 입력">
-        <span class="vb-mic-icon">🎤</span>
-        <span class="vb-mic-label">누르고 말하세요</span>
-      </button>
+    <div class="voice-bot-input-area">
+      <div class="vb-input-row">
+        <input type="text" id="voiceBotInput" class="vb-text-input" placeholder="일정을 입력하세요..." autocomplete="off">
+        <button id="voiceBotSend" class="vb-send-btn" aria-label="전송">➤</button>
+        <button id="voiceBotMic" class="voice-bot-mic-btn" aria-label="음성 입력">
+          <span class="vb-mic-icon">🎤</span>
+        </button>
+      </div>
       <div class="vb-status" id="voiceBotStatus"></div>
     </div>
   </div>
@@ -3209,6 +3212,21 @@
     const micBtn = document.getElementById('voiceBotMic');
     const chatEl = document.getElementById('voiceBotChat');
     const statusEl = document.getElementById('voiceBotStatus');
+    const vbInput = document.getElementById('voiceBotInput');
+    const vbSendBtn = document.getElementById('voiceBotSend');
+
+    // 텍스트 입력 이벤트
+    vbSendBtn.addEventListener('click', vbHandleTextSubmit);
+    vbInput.addEventListener('keydown', (e)=>{
+      if(e.key==='Enter' && !e.isComposing){ e.preventDefault(); vbHandleTextSubmit(); }
+    });
+    async function vbHandleTextSubmit(){
+      const t = vbInput.value.trim();
+      if(!t) return;
+      vbInput.value = '';
+      vbAddUser(t);
+      await vbHandleCommand(t);
+    }
 
     // ===== 플로팅 버튼 위치 복원/저장 =====
     const FAB_POS_KEY = `${PREFIX}_voice_fab_pos`;
@@ -3285,8 +3303,7 @@
         vbListening = true;
         vbSpeechResult = '';
         micBtn.classList.add('listening');
-        micBtn.querySelector('.vb-mic-label').textContent = '듣고 있어요...';
-        statusEl.textContent = '말씀하세요 (2초 무음 시 자동 종료)';
+        statusEl.textContent = '듣고 있어요... (2초 무음 시 자동 종료)';
 
         // (a) MediaRecorder
         vbChunks = [];
@@ -3378,7 +3395,6 @@
     function vbStopListening(){
       vbListening = false;
       micBtn.classList.remove('listening');
-      micBtn.querySelector('.vb-mic-label').textContent = '누르고 말하세요';
       statusEl.textContent = '인식 중...';
       if(vbRecognition){ try{ vbRecognition.stop(); }catch(e){} vbRecognition=null; }
       if(vbRecorder && vbRecorder.state==='recording') vbRecorder.stop();
