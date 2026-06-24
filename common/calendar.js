@@ -2070,17 +2070,128 @@
     const today=todayStr();
     const events=loadEvents(),grid=document.getElementById('daysGrid');
     grid.innerHTML='';
+
+    if(!compactMode){
+      // ===== 텍스트 모드: 주(week) 단위 행 + 다일 이벤트 오버레이 레이어 =====
+      grid.classList.add('text-mode-rows');
+      const numRows=Math.ceil((firstDay+lastDate)/7);
+      // 월 전체 기념일/반복 이벤트 미리 수집
+      const monthStart=formatDate(year,month,1),monthEnd=formatDate(year,month,lastDate);
+      const annivAll=generateAnniversaryVirtualEventsForRange(monthStart,monthEnd);
+      const recurAll=generateRecurringVirtualEventsForRange(monthStart,monthEnd);
+
+      for(let row=0;row<numRows;row++){
+        const weekRow=document.createElement('div');
+        weekRow.className='week-row';
+
+        // --- 주 날짜 범위 ---
+        const rowStartOff=row*7-firstDay; // day-1 offset
+        const rowFirst=new Date(year,month,rowStartOff+1);
+        const rowLast=new Date(year,month,rowStartOff+7);
+        const rowStartDate=fmtD(rowFirst),rowEndDate=fmtD(rowLast);
+
+        // --- (1) 다일 이벤트 오버레이 레이어 ---
+        const evLayer=document.createElement('div');
+        evLayer.className='week-ev-layer';
+
+        const allRowEvs=[...events,...annivAll,...recurAll];
+        const multiSeen=new Set();
+        const multiEvs=allRowEvs.filter(ev=>{
+          if(ev.startDate===ev.endDate) return false;
+          if(!(ev.startDate<=rowEndDate && ev.endDate>=rowStartDate)) return false;
+          const k=`${ev.startDate}|${ev.endDate}|${ev.text}`;
+          if(multiSeen.has(k)) return false; multiSeen.add(k); return true;
+        });
+
+        multiEvs.forEach(ev=>{
+          const clampStart=ev.startDate<rowStartDate?rowStartDate:ev.startDate;
+          const clampEnd=ev.endDate>rowEndDate?rowEndDate:ev.endDate;
+          const startCol=Math.round((new Date(clampStart)-rowFirst)/86400000);
+          const endCol=Math.round((new Date(clampEnd)-rowFirst)/86400000);
+          const bar=document.createElement('div');
+          bar.className=`week-ev-bar${ev.isAnniversary?' anniv-bar':''}`;
+          bar.style.gridColumn=`${startCol+1} / ${endCol+2}`;
+          bar.style.background=ev.color||'#95a5a6';
+          bar.title=ev.isAnniversary?ev.text:`${ev.user||''}: ${ev.text}`;
+          bar.innerHTML=`${ev.important?'<span class="bar-star">⭐</span>':''}${ev.text}`;
+          evLayer.appendChild(bar);
+        });
+        weekRow.appendChild(evLayer);
+
+        // --- (2) 7개 날짜 셀 ---
+        for(let col=0;col<7;col++){
+          const pos=row*7+col;
+          const day=pos-firstDay+1;
+          if(pos<firstDay||day>lastDate){
+            const e=document.createElement('div');e.className='day empty';weekRow.appendChild(e);continue;
+          }
+          const cell=document.createElement('div');cell.className='day';
+          const dateStr=formatDate(year,month,day);cell.dataset.date=dateStr;
+          const wd=col;
+          if(wd===0)cell.classList.add('sun');if(wd===6)cell.classList.add('sat');
+          const holidayName=getHoliday(dateStr);
+          if(holidayName){cell.classList.add('sun');cell.classList.add('holiday');}
+          if(dateStr===today)cell.classList.add('today');
+          if(multiSelectMode){
+            if(multiSelectDates.has(dateStr))cell.classList.add('selected');
+          } else if(selectedStart&&selectedEnd){
+            const lo=minDate(selectedStart,selectedEnd),hi=maxDate(selectedStart,selectedEnd);
+            if(selectedStart===selectedEnd&&dateStr===selectedStart)cell.classList.add('selected');
+            else if(dateStr===lo||dateStr===hi)cell.classList.add('range-edge');
+            else if(dateStr>lo&&dateStr<hi)cell.classList.add('range');
+          }
+          const num=document.createElement('div');num.className='date-num';num.textContent=day;cell.appendChild(num);
+          if(holidayName){
+            const hl=document.createElement('div');hl.className='holiday-name';hl.textContent=holidayName;cell.appendChild(hl);
+          }
+          // 단일일 이벤트만 셀 내부에 표시
+          const annivDay=annivAll.filter(ev=>ev.startDate===dateStr);
+          const recurDay=recurAll.filter(ev=>dateInRange(dateStr,ev.startDate,ev.endDate)&&ev.startDate===ev.endDate);
+          const singleEvs=[
+            ...events.filter(ev=>ev.startDate===ev.endDate&&ev.startDate===dateStr),
+            ...annivDay,...recurDay
+          ];
+          const seenS=new Set();
+          const dedupedS=singleEvs.filter(ev=>{
+            const k=`${ev.startDate}|${ev.endDate}|${ev.text}`;
+            if(seenS.has(k))return false;seenS.add(k);return true;
+          });
+          dedupedS.slice(0,3).forEach(ev=>{
+            const bar=document.createElement('div');
+            bar.className=`event-bar bar-single${ev.isAnniversary?' anniv-bar':''}`;
+            bar.style.background=ev.color||'#95a5a6';
+            bar.title=ev.isAnniversary?ev.text:`${ev.user||''}: ${ev.text}`;
+            bar.innerHTML=`${ev.important?'<span class="bar-star">⭐</span>':''}${ev.text}`;
+            cell.appendChild(bar);
+          });
+          if(dedupedS.length>3){
+            const more=document.createElement('div');more.className='event-bar bar-single bar-more';
+            more.textContent=`+${dedupedS.length-3}개 더`;cell.appendChild(more);
+          }
+          cell.addEventListener('click',(e)=>{
+            e.stopPropagation();
+            if(editingEventId) return;
+            handleDayClick(dateStr);
+          });
+          weekRow.appendChild(cell);
+        }
+        grid.appendChild(weekRow);
+      }
+      renderImportantBanner();
+      return;
+    }
+
+    // ===== 점(컴팩트) 모드: 기존 플랫 그리드 =====
+    grid.classList.remove('text-mode-rows');
     for(let i=0;i<firstDay;i++){const e=document.createElement('div');e.className='day empty';grid.appendChild(e);}
     for(let day=1;day<=lastDate;day++){
       const cell=document.createElement('div');cell.className='day';
       const dateStr=formatDate(year,month,day);cell.dataset.date=dateStr;
       const wd=new Date(year,month,day).getDay();
       if(wd===0)cell.classList.add('sun');if(wd===6)cell.classList.add('sat');
-      // 법정공휴일 — 빨간색 + 공휴일명 표시
       const holidayName=getHoliday(dateStr);
       if(holidayName){ cell.classList.add('sun'); cell.classList.add('holiday'); }
       if(dateStr===today)cell.classList.add('today');
-      // 다중 선택 모드면 selected 클래스만 (개별 토글)
       if(multiSelectMode){
         if(multiSelectDates.has(dateStr)) cell.classList.add('selected');
       } else if(selectedStart&&selectedEnd){
@@ -2096,8 +2207,6 @@
         hl.textContent=holidayName;
         cell.appendChild(hl);
       }
-
-      // 일반 이벤트 + 기념일 가상 이벤트 합산
       const annivDayEvs=generateAnniversaryVirtualEventsForRange(dateStr,dateStr);
       const recurDayEvs=generateRecurringVirtualEventsForRange(dateStr,dateStr);
       const dayEvs=[...events.filter(ev=>dateInRange(dateStr,ev.startDate,ev.endDate)), ...annivDayEvs, ...recurDayEvs];
@@ -2106,122 +2215,84 @@
         const k=`${ev.startDate}|${ev.endDate}|${ev.text}`;
         if(seen.has(k))return false;seen.add(k);return true;
       });
-      if(compactMode){
-        // 점 모드
-        // - 다일 이벤트: 가는 색띠로 다음 셀까지 연결 (cbar-start/mid/end/span)
-        // - 단일일 이벤트: 컬러 점 / 중요는 ⭐
-        const SHOW_DOTS=10;
-        const cbars=document.createElement('div');
-        cbars.className='day-cbars';
-        const dotsWrap=document.createElement('div');
-        dotsWrap.className='day-dots';
-        let drawn=0;
-        deduped.forEach(ev=>{
-          if(drawn>=SHOW_DOTS) return;
-          const tip=ev.isAnniversary?ev.text:`${ev.user||''}: ${ev.text}`;
-          const isMulti=ev.startDate!==ev.endDate && !ev.isAnniversary;
-          if(isMulti){
-            // 다일 — 가는 색띠
-            const isFirst=dateStr===ev.startDate||wd===0;
-            const isLast=dateStr===ev.endDate||wd===6;
-            let cls;
-            if(isFirst&&isLast)cls='cbar-span';
-            else if(isFirst)cls='cbar-start';
-            else if(isLast)cls='cbar-end';
-            else cls='cbar-mid';
-            const bar=document.createElement('div');
-            bar.className=`day-cbar ${cls}`;
-            bar.style.background=ev.color||'#95a5a6';
-            bar.title=tip;
-            // ⭐ 중요 표시는 시작 셀에만
-            if(ev.important && isFirst){
-              const s=document.createElement('span');
-              s.className='cbar-star'; s.textContent='⭐';
-              bar.appendChild(s);
-            }
-            cbars.appendChild(bar);
-          } else if(ev.isAnniversary){
-            // 생일은 🎂, 기념일은 💕 이모지로 표시
-            const ic=document.createElement('span');
-            ic.className='day-anniv-ic';
-            ic.textContent = ev.anniversaryType==='birthday' ? '🎂' : '💕';
-            ic.title=tip;
-            dotsWrap.appendChild(ic);
-          } else if(ev.isRecurring){
-            // 반복 일정 — 🔁 작은 흐린 아이콘
-            const ic=document.createElement('span');
-            ic.className='day-recur-ic';
-            ic.textContent='🔁';
-            ic.title=tip;
-            dotsWrap.appendChild(ic);
-          } else if(ev.important){
-            const star=document.createElement('span');
-            star.className='day-star';
-            star.style.color=ev.color||'#e74c3c';
-            star.textContent='⭐';
-            star.title=tip;
-            dotsWrap.appendChild(star);
-          } else {
-            const dot=document.createElement('span');
-            dot.className='day-dot';
-            dot.style.background=ev.color||'#95a5a6';
-            dot.title=tip;
-            dotsWrap.appendChild(dot);
-          }
-          drawn++;
-        });
-        if(cbars.childElementCount>0) cell.appendChild(cbars);
-        if(dotsWrap.childElementCount>0) cell.appendChild(dotsWrap);
-        if(deduped.length>SHOW_DOTS){
-          const more=document.createElement('div');
-          more.className='day-dot-more';
-          more.textContent=`+${deduped.length-SHOW_DOTS}`;
-          cell.appendChild(more);
-        }
-      } else {
-        // 텍스트 모드 — 삼성 캘린더 스타일 (왼쪽 컬러 바 + 1줄 텍스트)
-        deduped.slice(0,4).forEach(ev=>{
-          const isMulti=ev.startDate!==ev.endDate;
-          let barClass;
-          if(!isMulti){barClass='bar-single';}
-          else{
-            const isFirst=dateStr===ev.startDate||wd===0;
-            const isLast=dateStr===ev.endDate||wd===6;
-            if(isFirst&&isLast)barClass='bar-span';
-            else if(isFirst)barClass='bar-start';
-            else if(isLast)barClass='bar-end';
-            else barClass='bar-mid';
-          }
+      // 점 모드
+      const SHOW_DOTS=10;
+      const cbars=document.createElement('div');
+      cbars.className='day-cbars';
+      const dotsWrap=document.createElement('div');
+      dotsWrap.className='day-dots';
+      let drawn=0;
+      deduped.forEach(ev=>{
+        if(drawn>=SHOW_DOTS) return;
+        const tip=ev.isAnniversary?ev.text:`${ev.user||''}: ${ev.text}`;
+        const isMulti=ev.startDate!==ev.endDate && !ev.isAnniversary;
+        if(isMulti){
+          const isFirst=dateStr===ev.startDate||wd===0;
+          const isLast=dateStr===ev.endDate||wd===6;
+          let cls;
+          if(isFirst&&isLast)cls='cbar-span';
+          else if(isFirst)cls='cbar-start';
+          else if(isLast)cls='cbar-end';
+          else cls='cbar-mid';
           const bar=document.createElement('div');
-          bar.className=`event-bar ${barClass}${ev.isAnniversary?' anniv-bar':''}`;
-          // 삼성 스타일 — 불투명 배경색(사용자 색) + 흰 글씨
-          const evColor=ev.color||'#95a5a6';
-          bar.style.background=evColor;
-          // tooltip — 전체 텍스트 (hover 시 확인)
-          bar.title=ev.isAnniversary?ev.text:`${ev.user||''}: ${ev.text}`;
-          // 시작 셀 또는 단일 셀에만 텍스트 표시 (중간/끝은 색 블록만)
-          if(barClass==='bar-single'||barClass==='bar-start'||barClass==='bar-span'){
-            if(ev.isAnniversary){
-              bar.textContent=ev.text;
-            } else {
-              bar.innerHTML=`${ev.important?'<span class="bar-star">⭐</span>':''}${ev.text}`;
-            }
-          }          cell.appendChild(bar);
-        });
-        if(deduped.length>4){
-          const more=document.createElement('div');more.className='event-bar bar-single bar-more';
-          more.textContent=`+${deduped.length-4}개 더`;cell.appendChild(more);
+          bar.className=`day-cbar ${cls}`;
+          bar.style.background=ev.color||'#95a5a6';
+          bar.title=tip;
+          if(ev.important && isFirst){
+            const s=document.createElement('span');
+            s.className='cbar-star'; s.textContent='⭐';
+            bar.appendChild(s);
+          }
+          cbars.appendChild(bar);
+        } else if(ev.isAnniversary){
+          const ic=document.createElement('span');
+          ic.className='day-anniv-ic';
+          ic.textContent = ev.anniversaryType==='birthday' ? '🎂' : '💕';
+          ic.title=tip;
+          dotsWrap.appendChild(ic);
+        } else if(ev.isRecurring){
+          const ic=document.createElement('span');
+          ic.className='day-recur-ic';
+          ic.textContent='🔁';
+          ic.title=tip;
+          dotsWrap.appendChild(ic);
+        } else if(ev.important){
+          const star=document.createElement('span');
+          star.className='day-star';
+          star.style.color=ev.color||'#e74c3c';
+          star.textContent='⭐';
+          star.title=tip;
+          dotsWrap.appendChild(star);
+        } else {
+          const dot=document.createElement('span');
+          dot.className='day-dot';
+          dot.style.background=ev.color||'#95a5a6';
+          dot.title=tip;
+          dotsWrap.appendChild(dot);
         }
+        drawn++;
+      });
+      if(cbars.childElementCount>0) cell.appendChild(cbars);
+      if(dotsWrap.childElementCount>0) cell.appendChild(dotsWrap);
+      if(deduped.length>SHOW_DOTS){
+        const more=document.createElement('div');
+        more.className='day-dot-more';
+        more.textContent=`+${deduped.length-SHOW_DOTS}`;
+        cell.appendChild(more);
       }
       cell.addEventListener('click',(e)=>{
         e.stopPropagation();
-        if(editingEventId) return; // 수정 중에는 달력 날짜 선택 비활성화
+        if(editingEventId) return;
         handleDayClick(dateStr);
       });
       grid.appendChild(cell);
     }
     renderImportantBanner();
   }
+
+  // Date → 'YYYY-MM-DD' 헬퍼 (renderCalendar 내부용)
+  function fmtD(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+
 
   function activateInputs(){
     ['eventInput','eventFrom','eventFromMin','eventTo','eventToMin','importantCheck'].forEach(id=>{
