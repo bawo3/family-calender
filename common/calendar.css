@@ -138,7 +138,7 @@ body.dark .b-item.in-progress{background:rgba(46,204,113,0.15);}
 }
 .week-ev-bar{
   color:#fff;font-size:8px;line-height:1.1;
-  padding:0 2px;border-radius:2px;
+  padding:0 1px;border-radius:2px;
   overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
   margin:0;pointer-events:auto;cursor:pointer;
   min-height:12px;
@@ -155,7 +155,7 @@ body.dark .b-item.in-progress{background:rgba(46,204,113,0.15);}
 .day-num-cell.sat{color:#3498db;}
 .day-num-cell.today .date-num{background:var(--accent);color:#fff;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;}
 .day-num-cell .holiday-name{font-size:7px;color:#e74c3c;line-height:1;display:block;}
-.day{min-height:48px;background:var(--day-bg);border-radius:2px;padding:1px 1px;cursor:pointer;transition:background 0.15s;border:1px solid transparent;overflow:hidden;}
+.day{min-height:48px;background:var(--day-bg);border-radius:2px;padding:0;cursor:pointer;transition:background 0.15s;border:1px solid transparent;overflow:hidden;}
 /* 그리드 컨테이너에서 캘린더 경계 밖으로 글자가 흘러나가지 않도록 클립 */
 .days{overflow:hidden;}
 .day:hover{background:var(--day-hover);}
@@ -174,7 +174,7 @@ body.dark .b-item.in-progress{background:rgba(46,204,113,0.15);}
 }
 
 /* 이벤트 바 (삼성 캘린더 스타일 — 불투명 배경색 + 흰 글씨) */
-.event-bar{color:#fff;font-size:8px;line-height:1.1;height:auto;min-height:12px;max-height:24px;margin-top:0;padding:0 2px;border-radius:2px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-all;white-space:normal;}
+.event-bar{color:#fff;font-size:8px;line-height:1.1;height:auto;min-height:12px;max-height:24px;margin-top:0;padding:0 1px;border-radius:2px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-all;white-space:normal;}
 /* 다일 이벤트 바 — 셀 사이 gap을 메워 연속 블록 */
 .event-bar.bar-start{border-radius:3px 0 0 3px;margin-right:-8px;}
 .event-bar.bar-mid{border-radius:0;margin-left:-8px;margin-right:-8px;min-height:16px;max-height:16px;-webkit-line-clamp:1;}
